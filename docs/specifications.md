@@ -40,8 +40,8 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 
 Une **tâche** est une unité de travail rattachée à un projet (ou autonome — à challenger).
 
-- **Propriétés** : titre, description (markdown), statut (`a_faire` / `en_cours` / `en_revue` / `termine` / `bloquee`), priorité (`basse` / `normale` / `haute` / `critique`), assignée à (User, optionnel), créée par (User), échéance, étiquettes, projet parent (optionnel ?).
-- **Actions** : créer, éditer, changer le statut, réassigner, commenter, joindre des fichiers.
+- **Propriétés** : titre, description (markdown), statut (`a_faire` / `en_cours` / `en_revue` / `termine` / `bloquee`), priorité (`basse` / `normale` / `haute` / `critique`), assignée à (User, optionnel), créée par (User), échéance, étiquettes, projet parent (optionnel ?), **demandeur** (Requester, optionnel — cf. §3.11).
+- **Actions** : créer, éditer, changer le statut, réassigner, commenter, joindre des fichiers, associer/dissocier un demandeur.
 - 🟡 À décider : autorise-t-on des tâches **sans projet parent** (tâches "vrac") ? Mon avis : non en v1, force l'utilisateur à choisir/créer un projet pour éviter le fourre-tout.
 
 ### 3.3 Jalon (Milestone)
@@ -85,7 +85,7 @@ L'utilisateur n'est **pas géré dans l'app** : il est créé/modifié/supprimé
 
 Trace immuable de toutes les actions importantes effectuées dans l'application. **Pas un log technique** (qui va dans `var/log`), mais un journal métier consultable par les admins.
 
-- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
+- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `requester` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
 - **Immuabilité** : aucun update ni delete via l'app, pas même par un admin. Purge possible uniquement par script DBA / commande après la durée de rétention légale.
 - **Rétention** : 3 ans (à confirmer avec ta DPD).
 - **Consultation** : écran admin avec filtres (catégorie, action, utilisateur, intervalle de dates, sujet) + export CSV.
@@ -138,12 +138,29 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 
 | Slug | Quand | Payload |
 |---|---|---|
-| `task.created` | Création | `{ title, projectId }` |
+| `task.created` | Création | `{ title, projectId, requesterId? }` |
 | `task.updated` | Édition | `{ changes: {...} }` |
 | `task.status_changed` | Transition de statut | `{ from, to }` |
 | `task.assigned` | (Re)assignation | `{ from, to }` |
 | `task.priority_changed` | Changement de priorité | `{ from, to }` |
+| `task.requester_linked` | Demandeur associé à la tâche | `{ requesterId }` |
+| `task.requester_unlinked` | Demandeur dissocié | `{ requesterId }` |
 | `task.deleted` | Suppression (si autorisée) | `{}` |
+
+**Catégorie `requester`** (Lot 1, complétée Lot 4 et Lot 6)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `requester.created` | Création d'un demandeur | `{ firstName, lastName, hasEmail, hasPhone }` |
+| `requester.updated` | Édition des infos | `{ changes: {...} }` (sans valeurs nominatives) |
+| `requester.consent_granted` | Acceptation des notifications | `{ channel: "email" }` |
+| `requester.consent_withdrawn` | Désabonnement | `{ channel: "email", source: "email_link" / "agent" }` |
+| `requester.anonymized` | Suppression GDPR (anonymisation) | `{ requesterId }` |
+| `requester.notification_sent` | E-mail envoyé au demandeur (Lot 4) | `{ taskId, type: "status_changed" / ... }` |
+| `requester.token_generated` | Génération du jeton portail (Lot 6) | `{}` |
+| `requester.token_revoked` | Révocation du jeton (Lot 6) | `{ reason }` |
+| `requester.portal.viewed` | Accès au portail via jeton (Lot 6) | `{ taskId? }` (volume — voir §filtrage) |
+| `requester.portal.commented` | Commentaire posté depuis le portail (Lot 6) | `{ taskId, commentId }` |
 
 **Catégorie `comment`** (Lot 4)
 
@@ -198,7 +215,60 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 - Les payloads ne contiennent **jamais** de données sensibles (mot de passe, token, fichier). Les e-mails y sont OK (déjà connus).
 - Un événement très volumineux (ex. `api.request.received` au Lot 6) sera filtré pour éviter de saturer la table — décision au cas par cas dans le subscriber.
 
-### 3.10 Menu d'outils externes (lanceur d'applications)
+### 3.10 Demandeur (Requester)
+
+Personne **externe** à l'administration à l'origine d'une demande matérialisée par une tâche. Distinct du `User` interne (qui lui est authentifié via Authentik). Typiquement : un habitant, un commerçant, une association.
+
+- **Cas d'usage** : un agent reçoit un appel/courrier/mail d'un habitant, crée une tâche dans l'outil et y associe le demandeur. Le suivi du dossier est ensuite tracé.
+- **Propriétés** :
+  - `firstName` — prénom (obligatoire)
+  - `lastName` — nom (obligatoire)
+  - `email` — courriel (optionnel mais voir règle ci-dessous)
+  - `phone` — téléphone (optionnel mais voir règle ci-dessous)
+  - `address` — adresse postale (optionnel, utile pour les signalements géolocalisés)
+  - `notes` — commentaires libres internes (visible uniquement par les agents)
+  - `createdAt`, `createdBy` (l'agent qui a saisi)
+  - `consentNotifications` (booléen) — le demandeur a-t-il accepté de recevoir des notifications par e-mail ? (cf. §5.4 RGPD)
+  - `consentDate`, `consentWithdrawnAt`
+- **Règles de validation** :
+  - Au moins **un** des champs `email` ou `phone` est obligatoire (sinon impossible de recontacter).
+  - L'e-mail doit être valide.
+  - Le téléphone est stocké au format brut (pas de validation stricte E.164 en v1) mais affiché formaté.
+- **Déduplication** :
+  - Un demandeur est identifié par e-mail ou téléphone normalisé. À la création, l'agent voit un autocomplete sur les demandeurs existants. S'il choisit de créer quand même un doublon, c'est autorisé (un même nom-prénom peut être plusieurs personnes).
+  - Une commande `app:requesters:dedupe` (interactive) permet de fusionner les doublons détectés a posteriori.
+- **Lien avec Task** :
+  - Une tâche a 0 ou 1 demandeur (relation many-to-one, `nullable`).
+  - Un demandeur peut être lié à plusieurs tâches (historique de ses demandes).
+- **Actions sur le demandeur** :
+  - CRUD agent / admin
+  - Vue "fiche demandeur" listant toutes les tâches associées
+  - Modification des consentements (avec audit obligatoire)
+  - Suppression : interdite si des tâches y sont rattachées ; à la place, **anonymisation** (les champs nominatifs sont vidés, mais l'objet reste pour préserver l'historique des tâches).
+
+#### Notifications au demandeur (Lot 4)
+
+- Si `email` est renseigné **et** `consentNotifications=true`, le demandeur reçoit un e-mail à chaque transition de statut significative de sa demande (ex. `a_faire → en_cours`, `en_cours → termine`).
+- L'e-mail contient un lien d'accès au **portail demandeur** (cf. ci-dessous).
+- Modèle d'e-mail unique, sobre, identité visuelle de la mairie, lien de désabonnement (révocation du consentement).
+
+#### Portail demandeur via jeton (Lot 6)
+
+Permet au demandeur, sans compte ni mot de passe, de consulter et commenter sa demande.
+
+- **Mécanisme** : à la création du demandeur (ou à la première association à une tâche), génération d'un **jeton aléatoire** (32 octets, base62, ~43 caractères). Stocké hashé en base, l'URL contient la version claire.
+- **URL type** : `https://projets.mairie.example.fr/suivi/{jeton}`. La page liste les tâches du demandeur, leur statut, l'historique public (commentaires marqués comme visibles par le demandeur), et permet d'ajouter un commentaire.
+- **Visibilité** : seuls les commentaires explicitement marqués **public** par un agent (case à cocher "visible par le demandeur") sont visibles. Les commentaires internes restent cachés.
+- **Durée de validité** : tant qu'au moins une tâche du demandeur n'est pas clôturée, le jeton reste actif. À clôture de la dernière tâche, le jeton expire 30 jours après.
+- **Révocation** : un agent peut révoquer manuellement le jeton (régénération possible).
+- **Sécurité** :
+  - Rate limiting strict sur ces routes (Symfony RateLimiter + Redis).
+  - Lien jeton **HTTPS uniquement**, jamais en clair dans les logs.
+  - Jeton à entropie élevée, comparaison `hash_equals` côté serveur.
+  - Pas d'auto-complétion / cache navigateur (`Cache-Control: no-store`).
+- **Question ouverte** : le demandeur peut-il joindre une pièce (photo de signalement) depuis le portail ? Recommandation : **oui en Lot 6** mais avec scan antivirus + types restreints + taille max 5 Mo.
+
+### 3.11 Menu d'outils externes (lanceur d'applications)
 
 Dans la barre de navigation principale, en plus du menu de l'outil, un **menu déroulant** affiche des raccourcis vers d'autres outils internes de la mairie (genre app launcher type "grille Google Apps"). Permet de circuler facilement entre les outils auto-hébergés.
 
@@ -264,11 +334,30 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 
 ### 5.4 RGPD
 
-- Données nominatives : nom, prénom, e-mail, identifiant Authentik, contributions.
+#### Catégories de données
+
+| Catégorie | Source | Données | Base légale |
+|---|---|---|---|
+| Agents/élus (`User`) | Authentik | nom, prénom, e-mail, identifiant, groupes | Mission de service public |
+| **Demandeurs (`Requester`)** | Saisie agent ou portail | nom, prénom, e-mail, téléphone, adresse, notes internes | Mission de service public + intérêt légitime ; consentement explicite pour les notifications e-mail |
+| Audit log | Activité applicative | identifiants des acteurs, contenu d'actions | Obligation de traçabilité |
+
+#### Règles de traitement
+
 - Pas de tracking analytics tiers.
-- Logs applicatifs purgés à 90 jours, audit log conservé 3 ans (à valider).
-- Procédure de suppression d'un compte : anonymisation des contributions (`Utilisateur supprimé`), pas de hard delete pour préserver l'historique.
-- 🟡 À documenter : registre de traitement, mention CNIL côté footer.
+- Logs applicatifs purgés à 90 jours, audit log conservé 3 ans.
+- **Suppression d'un User (agent)** : anonymisation des contributions (libellé `Utilisateur supprimé`), pas de hard delete.
+- **Suppression d'un Requester** : impossible si des tâches y sont rattachées → anonymisation (champs nominatifs vidés, lien préservé).
+- **Demandeurs** : durée de conservation par défaut = durée de vie du dossier le plus récent + 5 ans (justifiable par la durée de prescription administrative). Une commande `app:requesters:purge --inactive-since=<date>` permet la purge programmée.
+- **Consentement** notifications : opt-in explicite, traçabilité dans l'audit log, désabonnement en un clic depuis chaque e-mail.
+- **Droit d'accès / rectification / effacement** : un demandeur peut écrire à la mairie ; une commande `app:requesters:export <id>` produit son dossier complet, `app:requesters:erase <id>` lance la procédure d'anonymisation.
+
+#### Documentation à produire
+
+- 🟡 Registre des traitements (à compléter par le DPO de la mairie)
+- 🟡 Mention CNIL et lien vers la politique de confidentialité dans le footer
+- 🟡 Mention sur le portail demandeur expliquant la finalité et les droits
+- 🟡 Page "déclaration d'accessibilité" (RGAA) obligatoire
 
 ### 5.5 Accessibilité
 
@@ -322,3 +411,7 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 5. Noms exacts des groupes Authentik à utiliser ?
 6. Y a-t-il des intégrations existantes à prévoir (annuaire LDAP de la mairie au-delà d'Authentik, GED, parapheur) ?
 7. Est-ce qu'un agent peut voir les tâches d'un autre agent par défaut ? (recommandation : oui — transparence interne)
+8. **Demandeur** : nom + prénom **obligatoires** ou peut-on accepter un signalement anonyme (utile pour les habitants qui ne veulent pas se déclarer) ? (recommandation : nom obligatoire, prénom optionnel ; au moins un canal de contact mail/tél obligatoire)
+9. **Demandeur portail** : autorise-t-on le commentaire depuis le portail (Lot 6) ou consultation seule ? (recommandation : oui, commentaire autorisé, modéré côté agent qui voit les nouveaux commentaires demandeur dans son flux)
+10. **Demandeur portail pièces jointes** : autoriser à joindre une photo (signalement type "trou dans la chaussée") ? (recommandation : oui, mais en Lot 6 avec restrictions strictes)
+11. **Statuts visibles par le demandeur** : tous les statuts internes (`a_faire`, `en_cours`, `en_revue`…) sont-ils exposés tels quels au demandeur, ou faut-il un libellé "demandeur-friendly" ? (recommandation : libellés simplifiés mappés depuis les statuts internes — "Reçu" / "En traitement" / "Traité")
