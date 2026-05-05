@@ -73,7 +73,141 @@ Repère d'avancement sur un projet (ex. "Cahier des charges validé", "MEP prép
 - Déclencheurs : assignation d'une tâche, mention dans un commentaire, changement de statut sur un projet/tâche que je suis, échéance approchante (J-3, J-1).
 - Préférences par utilisateur (toggle e-mail / in-app).
 
-## 4. Spécifications fonctionnelles par écran (à compléter)
+### 3.8 Utilisateur (vue applicative)
+
+L'utilisateur n'est **pas géré dans l'app** : il est créé/modifié/supprimé dans Authentik. L'app conserve une projection locale pour rattacher les contributions et afficher les informations utiles.
+
+- **Propriétés persistées** : `authentikId` (clé), `username`, `email`, `displayName`, `roles` (dérivés des groupes), `groupsSnapshot` (groupes Authentik au dernier login, pour affichage), `lastLoginAt`, `createdAt`, `disabledAt` (si désactivé côté Authentik).
+- **Cycle de vie** : l'utilisateur apparaît dans la base au premier login OIDC. Si Authentik renvoie un utilisateur déjà connu (même `authentikId`), on met à jour ses infos.
+- **Désactivation** : si l'utilisateur n'arrive plus à se connecter (suppression côté Authentik), il reste en base avec ses contributions intactes. Une commande `app:users:reconcile` (à venir) peut interroger l'API Authentik pour marquer les comptes orphelins.
+
+### 3.9 Événement d'audit (audit log)
+
+Trace immuable de toutes les actions importantes effectuées dans l'application. **Pas un log technique** (qui va dans `var/log`), mais un journal métier consultable par les admins.
+
+- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
+- **Immuabilité** : aucun update ni delete via l'app, pas même par un admin. Purge possible uniquement par script DBA / commande après la durée de rétention légale.
+- **Rétention** : 3 ans (à confirmer avec ta DPD).
+- **Consultation** : écran admin avec filtres (catégorie, action, utilisateur, intervalle de dates, sujet) + export CSV.
+
+#### Approche en deux temps
+
+| Lot | Ce qui est livré |
+|---|---|
+| Lot 0 | Définition des **classes d'événements applicatifs** (`Application/Event/`) + dispatch via Symfony EventDispatcher dans le code de sécurité |
+| Lot 1, 4, 5, 6 | Chaque feature **émet** ses propres événements applicatifs |
+| **Lot 2** | Entité `AuditLog`, subscriber unique qui persiste tous ces événements, UI admin avec filtres |
+
+Conséquence : on ne revient **pas** sur le code des features pour brancher l'audit. Le subscriber écoute simplement tous les événements de la liste ci-dessous au moment où il est mis en place.
+
+#### Liste exhaustive des événements à enregistrer
+
+> Référence pour les développeurs : à chaque fois qu'on implémente une fonctionnalité dans cette liste, on émet l'événement correspondant via `EventDispatcher`. La classe d'événement vit dans `src/Application/Event/`. Cette liste est appelée à grandir, c'est attendu.
+
+**Catégorie `security`** (livrée Lot 0)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `security.login.success` | Login OIDC réussi | `{ authentikId, groups }` |
+| `security.login.failure` | Échec OIDC (erreur Authentik, refus) | `{ reason, attemptedEmail? }` |
+| `security.logout` | Logout local ou SSO | `{}` |
+| `security.access_denied` | `AccessDeniedException` levée | `{ route, requiredRoles }` |
+| `security.session.expired` | Session expirée détectée | `{}` |
+
+**Catégorie `user`** (Lot 0 partiellement, complété Lot 2)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `user.first_seen` | Premier login d'un utilisateur (création locale) | `{ authentikId, email, displayName }` |
+| `user.profile_updated` | Mise à jour des infos depuis Authentik au login | `{ changes: {field: {old, new}} }` |
+| `user.roles_changed` | Les rôles dérivés changent suite à modification des groupes | `{ added: [...], removed: [...] }` |
+| `user.disabled` | Détecté désactivé côté Authentik (commande de réconciliation) | `{ reason }` |
+
+**Catégorie `project`** (Lot 1)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `project.created` | Création d'un projet | `{ title, visibility }` |
+| `project.updated` | Édition d'un projet (champs métier) | `{ changes: {field: {old, new}} }` |
+| `project.status_changed` | Transition de statut | `{ from, to }` |
+| `project.archived` | Archivage | `{}` |
+| `project.unarchived` | Désarchivage | `{}` |
+| `project.responsible_changed` | Changement de responsable | `{ from, to }` |
+
+**Catégorie `task`** (Lot 1)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `task.created` | Création | `{ title, projectId }` |
+| `task.updated` | Édition | `{ changes: {...} }` |
+| `task.status_changed` | Transition de statut | `{ from, to }` |
+| `task.assigned` | (Re)assignation | `{ from, to }` |
+| `task.priority_changed` | Changement de priorité | `{ from, to }` |
+| `task.deleted` | Suppression (si autorisée) | `{}` |
+
+**Catégorie `comment`** (Lot 4)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `comment.created` | Nouveau commentaire | `{ subjectType, subjectId, mentions: [...] }` |
+| `comment.edited` | Édition (dans la fenêtre de 15 min) | `{ }` |
+| `comment.deleted` | Suppression par admin/auteur | `{}` |
+
+**Catégorie `attachment`** (Lot 4)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `attachment.uploaded` | Upload | `{ filename, size, mime }` |
+| `attachment.deleted` | Suppression | `{ filename }` |
+
+**Catégorie `notification`** (Lot 4)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `notification.sent` | Notification envoyée (in-app ou e-mail) | `{ recipientId, channel, type }` |
+| `notification.read` | Marquée comme lue | `{ notificationId }` |
+
+**Catégorie `admin`** (Lot 0 et au-delà)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `admin.category.created/updated/deleted` | Gestion des catégories | `{ name, parentId? }` |
+| `admin.settings.updated` | Modification paramètre global | `{ key, oldValue, newValue }` |
+| `admin.audit.exported` | Export CSV du journal | `{ filterCount, rowCount }` |
+
+**Catégorie `api`** (Lot 6)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `api.token.created` | Création d'une clé d'API | `{ tokenLabel, scopes }` |
+| `api.token.revoked` | Révocation | `{ tokenLabel }` |
+| `api.signalement.received` | Endpoint POST /api/signalements appelé | `{ source, taskId }` |
+
+**Catégorie `system`**
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `system.maintenance.started/ended` | Mode maintenance | `{ message? }` |
+| `system.migration.applied` | Migration BDD appliquée | `{ version }` |
+| `system.audit.purged` | Purge manuelle du journal | `{ before, deletedCount }` |
+
+#### Conventions techniques
+
+- Toutes les classes d'événements héritent d'une interface `AuditableEvent` qui expose `category()`, `action()`, `subject()`, `payload()`.
+- Le subscriber unique du Lot 2 écoute `AuditableEvent` (pas chaque classe individuellement) — l'ajout d'un nouvel événement au fil des lots est gratuit.
+- Les payloads ne contiennent **jamais** de données sensibles (mot de passe, token, fichier). Les e-mails y sont OK (déjà connus).
+- Un événement très volumineux (ex. `api.request.received` au Lot 6) sera filtré pour éviter de saturer la table — décision au cas par cas dans le subscriber.
+
+### 3.10 Menu d'outils externes (lanceur d'applications)
+
+Dans la barre de navigation principale, en plus du menu de l'outil, un **menu déroulant** affiche des raccourcis vers d'autres outils internes de la mairie (genre app launcher type "grille Google Apps"). Permet de circuler facilement entre les outils auto-hébergés.
+
+- Configuré côté **administration** (et/ou via fichier de config / `.env`, à trancher).
+- Chaque entrée : libellé, URL, icône (image ou emoji ou lettre), description courte (tooltip), groupe de visibilité optionnel (si tu veux cacher certains liens à certains rôles).
+- Stockage : entité `ExternalLink` simple (`label`, `url`, `icon`, `description`, `position`, `restrictedToRoles[]`, `enabled`).
+- UI : icône "grille" dans le header → dropdown ou panneau plein-écran sur mobile. Liens en target `_blank` avec `rel="noopener"`.
+- Pas d'authentification SSO transparente attendue côté app : on suppose que l'utilisateur est authentifié sur les outils externes via Authentik (le SSO étant déjà en place pour eux aussi).
+- 🟡 **À décider** : configuration via interface admin (plus pratique) ou via `.env` (plus simple pour la v0). Recommandation : **interface admin** dès le Lot 0 (entité + CRUD), reste léger à coder.
 
 > 🟡 À remplir au fil des itérations. Pour chaque écran : objectif, données affichées, actions, règles de sécurité.
 
@@ -85,7 +219,13 @@ Repère d'avancement sur un projet (ex. "Cahier des charges validé", "MEP prép
 - [ ] Mes tâches (vue personnelle)
 - [ ] Calendrier (échéances et jalons)
 - [ ] Préférences utilisateur
-- [ ] Administration (catégories, paramètres globaux)
+- [ ] **Administration**
+  - [ ] Liste des utilisateurs : nom, e-mail, groupes Authentik, rôles dérivés, dernière connexion, statut, lien direct vers la fiche dans Authentik
+  - [ ] Gestion des **liens externes** affichés dans le menu d'outils (CRUD simple)
+  - [ ] Journal d'événements (audit log) avec filtres (catégorie, action, utilisateur, période, recherche texte) + export CSV — **Lot 2**
+  - [ ] Catégories (gestion de la taxonomie hiérarchique)
+  - [ ] Paramètres globaux (à définir au fil de l'eau)
+  - [ ] (plus tard) clés d'API pour la future app citoyenne
 
 ## 5. Spécifications techniques
 
@@ -135,6 +275,16 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 - Cible : **RGAA 4.1** niveau AA (obligation pour une collectivité).
 - Choix techniques alignés : composants HTML natifs, ARIA quand nécessaire, contrastes vérifiés, navigation clavier complète.
 - Test automatisé : `axe-core` via `pa11y-ci` dans la CI sur quelques pages critiques.
+
+### 5.5b Responsive / mobile
+
+- **Mobile-first** : conception en partant de l'écran le plus contraint, élargissement progressif vers desktop.
+- Cibles : iPhone SE (375 px) jusqu'à grand écran 1920 px et plus. Tablettes incluses.
+- Pas d'app mobile native en v1 — usage via navigateur mobile.
+- Composants UI testés sur trois breakpoints (≤640 px, ≤1024 px, > 1024 px).
+- Le menu de navigation passe en burger en dessous de 1024 px.
+- Les tableaux longs (liste projets, audit log) sont rendus en cartes empilées sur mobile plutôt qu'en tableau scrollable horizontalement.
+- Test : la CI exécute Playwright (ou équivalent) sur les pages clés en deux viewports (mobile + desktop) — à mettre en place au Lot 1, Lot 0 valide visuellement uniquement.
 
 ### 5.6 Internationalisation
 

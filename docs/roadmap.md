@@ -12,22 +12,58 @@
 
 ### Lot 0 — Fondations · `v0.1.0` · 📅 prévu
 
-Squelette technique opérationnel, sans fonctionnalité métier.
+Squelette technique opérationnel + section administration de base + infrastructure d'audit log. Pas encore de gestion de projets/tâches.
+
+**Squelette technique**
 
 - [ ] `composer create-project symfony/skeleton` + structure `src/` (Controller / Application / Domain / Infrastructure / Security)
 - [ ] Dockerfile FrankenPHP + `docker-compose.dev.yml` + `docker-compose.prod.yml`
 - [ ] `Makefile` (install, migrate, test, stan, cs, shell, reset)
-- [ ] Configuration Doctrine + Postgres + premières migrations vides
+- [ ] Configuration Doctrine + Postgres + premières migrations
 - [ ] Configuration Redis (cache + sessions + Messenger)
-- [ ] Intégration Authentik OIDC + voter de base + page `/profile` listant les groupes Authentik de l'utilisateur connecté
-- [ ] Layout Twig de base (header avec menu utilisateur, footer, page d'accueil placeholder)
+- [ ] Layout Twig responsive (mobile-first, burger menu < 1024 px, header avec menu utilisateur, footer)
 - [ ] Symfony UX Turbo + Stimulus en place + composant Hello World
-- [ ] CI GitHub Actions (lint + tests + phpstan + composer audit)
+- [ ] Choix du framework CSS (Tailwind vs Bootstrap) tranché et intégré
+- [ ] CI GitHub Actions (lint + tests + phpstan + composer audit + deptrac)
 - [ ] CI GitLab miroir
 - [ ] Build + push image GHCR sur tag
 - [ ] Doc d'install à jour (`docs/local-dev.md`, `docs/deploiement.md`, `docs/authentik.md`)
 
-**Critère de fin** : un nouvel arrivant clone le repo, lance `make install`, se connecte via Authentik, voit ses groupes sur `/profile`. La CI est verte. Une image taguée `v0.1.0` est publiée sur GHCR.
+**Authentification**
+
+- [ ] Intégration Authentik OIDC (bundle `drenso/symfony-oidc-bundle` à confirmer)
+- [ ] Mapping groupes Authentik → rôles Symfony selon `OIDC_GROUP_ROLE_MAPPING`
+- [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`)
+- [ ] Réconciliation utilisateur au login (création si nouveau, mise à jour sinon)
+- [ ] Page `/profile` (groupes Authentik affichés, lien vers Authentik)
+- [ ] Logout local + logout SSO côté Authentik
+- [ ] Voter de base + handlers `AccessDeniedException`
+
+**Section administration (réservée `ROLE_ADMIN`)**
+
+- [ ] Layout admin distinct (sidebar de navigation admin)
+- [ ] Liste des utilisateurs : nom, e-mail, groupes, rôles dérivés, dernière connexion, statut (actif/désactivé), lien direct vers la fiche Authentik
+- [ ] Tri et filtres sur la liste utilisateurs (par rôle, par groupe, recherche par nom/email)
+- [ ] Détail utilisateur : historique de connexions, contributions à venir (sera enrichi plus tard)
+- [ ] Pas de création/édition d'utilisateur dans l'app (c'est Authentik qui gère)
+- [ ] **Gestion des liens externes** (CRUD `ExternalLink` : libellé, URL, icône, description, position, restriction par rôle, actif/inactif)
+
+**Menu d'outils externes (front)**
+
+- [ ] Composant Twig "lanceur d'apps" intégré dans le header (icône grille → dropdown)
+- [ ] Lecture des `ExternalLink` actifs filtrés par rôles de l'utilisateur courant
+- [ ] Vue mobile adaptée (panneau plein écran plutôt que dropdown)
+- [ ] Cible `_blank` + `rel="noopener noreferrer"` pour la sécurité
+
+**Préparation de l'audit log (sans stockage encore)**
+
+> Le stockage et l'UI viennent au **Lot 2** (lot dédié). Mais on définit dès maintenant les classes d'événements applicatifs et on les émet depuis le code de sécurité, pour ne pas avoir à revenir sur ce code plus tard.
+
+- [ ] Définition des classes d'événements applicatifs côté `Application/Event/` (`UserLoggedIn`, `UserLoggedOut`, `LoginFailed`, `AccessDenied`, voir liste complète dans `docs/specifications.md` §3.9)
+- [ ] Dispatch via Symfony EventDispatcher dans le flux de sécurité OIDC
+- [ ] Pas de subscriber persistant à ce stade (ou un subscriber `dev` qui log dans la console)
+
+**Critère de fin** : un nouvel arrivant clone le repo, lance `make install`, se connecte via Authentik, voit ses groupes sur `/profile`. Un admin accède à `/admin`, voit la liste des utilisateurs. Les événements de sécurité sont émis dans Symfony (vérifiable via `bin/console debug:event-dispatcher`). L'application est utilisable confortablement sur smartphone. La CI est verte. Une image taguée `v0.1.0` est publiée sur GHCR.
 
 ### Lot 1 — Projets et tâches · `v0.2.0` · 📅 prévu
 
@@ -41,20 +77,43 @@ CRUD de base avec assignation et statuts.
 - [ ] Assignation d'une tâche à un utilisateur
 - [ ] Voters : qui peut éditer quoi
 - [ ] Vue "Mes tâches"
+- [ ] **Émission des événements applicatifs** : `project.created/updated/archived/status-changed`, `task.created/updated/assigned/status-changed/deleted` (cf. `docs/specifications.md` §3.9)
 - [ ] Tests fonctionnels du parcours complet
+- [ ] Vues mobile testées (liste projets en cartes, formulaires adaptés)
 
-### Lot 2 — Vue d'ensemble · `v0.3.0` · 📅 prévu
+### Lot 2 — Audit log et journalisation · `v0.3.0` · 📅 prévu
+
+Stockage et consultation de tous les événements applicatifs émis depuis le Lot 0. Ce lot ne nécessite aucun changement dans le code des autres lots — les événements sont déjà dispatchés.
+
+- [ ] Entité `AuditLog` immuable (id, occurredAt, category, action, actor, subjectType, subjectId, payload JSON, ip, userAgent)
+- [ ] Service `AuditLogger` injectable (utilisable manuellement si besoin)
+- [ ] EventSubscriber unique qui consomme **tous** les événements applicatifs définis et les persiste en `AuditLog`
+- [ ] Migration créant la table `audit_log` avec index utiles (occurredAt, actor_id, category, subjectType+subjectId)
+- [ ] Écran admin "Journal d'événements" (`/admin/audit`)
+  - [ ] Liste paginée (50/page), tri par date desc
+  - [ ] Filtres : catégorie, action, utilisateur, intervalle de dates, sujet (type + id)
+  - [ ] Recherche texte dans `payload` (JSONB)
+  - [ ] Export CSV de la sélection filtrée
+  - [ ] Vue mobile en cartes empilées
+- [ ] Page de détail d'un événement (payload formaté lisiblement)
+- [ ] Sur la fiche utilisateur (admin) : onglet "historique" filtrant le journal sur cet utilisateur
+- [ ] Sur la fiche projet/tâche : encart "activité" filtrant le journal sur cette ressource
+- [ ] Tests fonctionnels : login, création projet, modif tâche → vérifier qu'un `AuditLog` est créé avec les bons champs
+
+**Critère de fin** : tous les événements émis depuis le Lot 0 sont consultables et filtrables dans `/admin/audit`. Une commande `app:audit:purge --before=2023-01-01` permet la purge manuelle (sans interface). Pas de perte d'événements antérieurs au déploiement de ce lot — ils n'auront simplement pas été enregistrés.
+
+### Lot 3 — Vue d'ensemble · `v0.4.0` · 📅 prévu
 
 Visualisation et recherche.
 
 - [ ] Vue Kanban des tâches d'un projet (drag & drop via Stimulus + Turbo)
 - [ ] Recherche full-text Postgres (titre, description) sur projets et tâches
 - [ ] Filtres avancés (statut, assigné, échéance, étiquettes)
-- [ ] Dashboard d'accueil (mes tâches en retard, projets que je suis, activité récente)
+- [ ] Dashboard d'accueil (mes tâches en retard, projets que je suis, activité récente — données déjà dispo via l'audit log)
 - [ ] Système d'étiquettes libres
 - [ ] Catégories hiérarchiques administrées
 
-### Lot 3 — Collaboration · `v0.4.0` · 📅 prévu
+### Lot 4 — Collaboration · `v0.5.0` · 📅 prévu
 
 Échanges autour des projets et tâches.
 
@@ -65,8 +124,9 @@ Visualisation et recherche.
 - [ ] Notifications e-mail (Mailer + Messenger async)
 - [ ] Préférences utilisateur (toggle e-mail / in-app)
 - [ ] Système "suivre un projet/tâche"
+- [ ] Émission des événements applicatifs : `comment.created/edited/deleted`, `attachment.uploaded/deleted`, `notification.sent`
 
-### Lot 4 — Pilotage · `v0.5.0` · 📅 prévu
+### Lot 5 — Pilotage · `v0.6.0` · 📅 prévu
 
 Outils de suivi macro.
 
@@ -76,8 +136,9 @@ Outils de suivi macro.
 - [ ] Export PDF d'une fiche projet (rapport complet)
 - [ ] Tableau de bord "vue élu" (projets actifs, jalons à venir, alertes)
 - [ ] Rappels d'échéance (J-3, J-1) par e-mail
+- [ ] Émission des événements applicatifs : `milestone.created/updated/reached`, `export.generated`
 
-### Lot 5 — Préparation API citoyenne · `v0.6.0` · 📅 prévu
+### Lot 6 — Préparation API citoyenne · `v0.7.0` · 📅 prévu
 
 Première brique pour la future application citoyenne de signalements.
 
@@ -87,8 +148,9 @@ Première brique pour la future application citoyenne de signalements.
 - [ ] Documentation OpenAPI
 - [ ] Tests d'intégration API
 - [ ] Rate limiting (Symfony RateLimiter + Redis)
+- [ ] Émission des événements applicatifs : `api.token.created/revoked`, `api.request.received` (volume — à filtrer)
 
-### Lot 6+ — À définir
+### Lot 7+ — À définir
 
 Voir la section "Backlog" ci-dessous.
 
