@@ -30,19 +30,225 @@ Les rôles sont **dérivés des groupes Authentik**. Aucun rôle n'est géré da
 
 ### 3.1 Projet
 
-Un **projet** représente une initiative de la mairie (ex. "Refonte du site web", "Fibre dans les écoles").
+Un **projet** représente une initiative de la mairie (ex. "Refonte du site web", "Fibre dans les écoles", "Aménagement parc municipal"). C'est l'unité de regroupement des tâches.
 
-- **Propriétés** : titre, description (markdown), statut (`brouillon` / `actif` / `en_pause` / `termine` / `annule`), responsable (User), date de début, date d'échéance prévisionnelle, date de fin réelle, catégorie(s), visibilité.
-- **Visibilité** : `public_interne` (tous les utilisateurs authentifiés) ou `restreint` (liste explicite de groupes Authentik). Pas de visibilité externe en v1.
-- **Actions** : créer, éditer, archiver, dupliquer, exporter (PDF/CSV).
+#### Attributs
+
+| Attribut | Type | Obligatoire | Description |
+|---|---|---|---|
+| `id` | UUID v7 | ✓ | Identifiant interne, immuable |
+| `reference` | string (10) | ✓ (généré) | Référence lisible incrémentale annuelle, ex. `P-2026-014`, immuable |
+| `slug` | string (255) | ✓ (généré) | Pour les URLs ; généré du titre, peut être édité par un admin |
+| `title` | string (255) | ✓ | Titre du projet |
+| `summary` | string (255) | ✗ | Résumé en une phrase, affiché dans les listes |
+| `description` | text (markdown) | ✗ | Description complète |
+| `status` | enum | ✓ | Voir cycle de vie ci-dessous |
+| `visibility` | enum | ✓ | `public_interne` (tous authentifiés) ou `restricted` |
+| `restrictedToGroups` | string[] | ✗ | Groupes Authentik autorisés si `visibility=restricted` (sinon ignoré) |
+| `owner` | User | ✓ | Responsable du projet |
+| `coOwners` | User[] | ✗ | Co-responsables, mêmes droits que le responsable sauf transfert d'ownership |
+| `category` | Category | ✗ | Catégorie principale (taxonomie hiérarchique, cf. §3.6) |
+| `labels` | string[] | ✗ | Étiquettes libres |
+| `commissions` | Commission[] | ✗ | Commissions associées (cf. §3.12) |
+| `startDate` | date | ✗ | Date de début prévisionnelle |
+| `dueDate` | date | ✗ | Date d'échéance prévisionnelle |
+| `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin réelle |
+| `budgetPlanned` | money (€) | ✗ | Budget prévisionnel |
+| `budgetSpent` | money (€) | ✗ | Budget consommé (saisie manuelle, pas de comptabilité) |
+| `archivedAt` | datetime | ✗ | Drapeau d'archivage (orthogonal au statut) |
+| `createdAt` | datetime | ✓ | |
+| `createdBy` | User | ✓ | Créateur initial |
+| `updatedAt` | datetime | ✓ | Dernière modification |
+| `updatedBy` | User | ✓ | Auteur de la dernière modification |
+
+#### Visibilité
+
+- `public_interne` (par défaut) : tous les utilisateurs authentifiés voient le projet.
+- `restricted` : seuls les membres d'au moins un des `restrictedToGroups` (groupes Authentik) **plus** le responsable et les co-responsables peuvent voir/éditer. Utile pour les sujets RH ou confidentiels.
+- L'archivage (`archivedAt != null`) est indépendant du statut et de la visibilité : un projet archivé reste visible (s'il était visible) en lecture seule.
+
+#### Cycle de vie
+
+```
+   ┌─────────────┐
+   │  brouillon  │  ← état initial à la création
+   └──────┬──────┘
+          │ activer
+          ▼
+   ┌─────────────┐         mettre en pause          ┌─────────────┐
+   │    actif    │  ─────────────────────────────►  │   en_pause  │
+   │             │  ◄─────────────────────────────  │             │
+   └──┬──────┬───┘             reprendre            └──────┬──────┘
+      │      │                                              │
+      │      │ clôturer (toutes tâches non bloquantes       │
+      │      │  doivent être en termine/annule)             │
+      │      ▼                                              │
+      │   ┌─────────────┐                                   │
+      │   │   termine   │  (terminal — édition admin only)  │
+      │   └─────────────┘                                   │
+      │                                                     │
+      │ annuler                            annuler          │
+      ▼                                                     ▼
+   ┌─────────────┐                                   ┌─────────────┐
+   │   annule    │  ◄──────────────────────────────  │             │
+   └─────────────┘                                   └─────────────┘
+```
+
+#### Statuts détaillés
+
+| Statut | Signification | Édition possible | Tâches modifiables |
+|---|---|---|---|
+| `brouillon` | Esquisse en préparation, peu visible | ✓ | ✓ |
+| `actif` | En cours d'exécution | ✓ | ✓ |
+| `en_pause` | Suspendu temporairement (attente arbitrage, budget, partenaire) | ✓ (champs métadonnées) | ✗ (les tâches ne peuvent pas changer de statut) |
+| `termine` | Clôturé avec succès, lecture seule | Admin uniquement | ✗ |
+| `annule` | Abandonné, lecture seule | Admin uniquement | ✗ |
+
+#### Règles de transition
+
+- `brouillon → actif` : "Activer". Vérifie que `owner`, `title` sont renseignés.
+- `actif → en_pause` : "Mettre en pause". Demande un motif (texte libre, stocké dans le payload de l'événement `project.status_changed`).
+- `en_pause → actif` : "Reprendre".
+- `actif → termine` : "Clôturer". Bloque si une tâche du projet est dans un statut non terminal (`a_faire`, `en_cours`, `en_revue`, `bloquee`) **sauf** si l'utilisateur coche "ignorer les tâches restantes" (avec confirmation, audit trail).
+- `actif | en_pause | brouillon → annule` : "Annuler". Demande un motif. Les tâches du projet basculent automatiquement en `annulee`.
+- `termine → actif` ou `annule → actif` : interdit. Si réouverture nécessaire, créer un nouveau projet.
+
+#### Droits par rôle
+
+| Action | `ROLE_LECTEUR` | `ROLE_AGENT` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
+|---|---|---|---|---|
+| Voir un projet visible | ✓ | ✓ | ✓ | ✓ |
+| Créer un projet | ✗ | ✗ | ✓ | ✓ |
+| Éditer un projet dont je suis owner/coOwner | n/a | ✓ | ✓ | ✓ |
+| Éditer n'importe quel projet | ✗ | ✗ | ✗ | ✓ |
+| Transférer l'ownership | ✗ | ✗ | ✓ (si owner) | ✓ |
+| Archiver / désarchiver | ✗ | ✗ | ✓ (si owner) | ✓ |
+| Modifier un projet en `termine`/`annule` | ✗ | ✗ | ✗ | ✓ |
+| Voir un projet `restricted` sans appartenir aux groupes | ✗ | ✗ | ✗ | ✓ |
+
+#### Actions
+
+- Créer, éditer, archiver, désarchiver
+- Transférer l'ownership (avec audit trail)
+- Dupliquer (copie en `brouillon` sans tâches)
+- Exporter PDF (Lot 5) / CSV (Lot 5)
+- Suivre / ne plus suivre (Lot 4)
 
 ### 3.2 Tâche
 
-Une **tâche** est une unité de travail rattachée à un projet (ou autonome — à challenger).
+Une **tâche** est une unité de travail rattachée à un projet. Elle représente une action concrète à mener, peut être assignée à un agent, et peut découler d'une demande externe (cf. Demandeur §3.10).
 
-- **Propriétés** : titre, description (markdown), statut (`a_faire` / `en_cours` / `en_revue` / `termine` / `bloquee`), priorité (`basse` / `normale` / `haute` / `critique`), assignée à (User, optionnel), créée par (User), échéance, étiquettes, projet parent (optionnel ?), **demandeur** (Requester, optionnel — cf. §3.11).
-- **Actions** : créer, éditer, changer le statut, réassigner, commenter, joindre des fichiers, associer/dissocier un demandeur.
-- 🟡 À décider : autorise-t-on des tâches **sans projet parent** (tâches "vrac") ? Mon avis : non en v1, force l'utilisateur à choisir/créer un projet pour éviter le fourre-tout.
+#### Attributs
+
+| Attribut | Type | Obligatoire | Description |
+|---|---|---|---|
+| `id` | UUID v7 | ✓ | Identifiant interne, immuable |
+| `reference` | string (10) | ✓ (généré) | Référence lisible, ex. `T-2026-0042`, immuable, incrémentale annuelle |
+| `title` | string (255) | ✓ | Titre |
+| `description` | text (markdown) | ✗ | Détail de la tâche |
+| `status` | enum | ✓ | Voir cycle de vie ci-dessous |
+| `priority` | enum | ✓ | `basse` / `normale` (défaut) / `haute` / `critique` |
+| `project` | Project | ✓ | Projet parent (cf. question ouverte #1) |
+| `assignee` | User | ✗ | Agent assigné |
+| `requester` | Requester | ✗ | Demandeur externe (cf. §3.10) |
+| `commissions` | Commission[] | ✗ | Héritées du projet par défaut au moment de la création, surchargeables (cf. §3.12) |
+| `labels` | string[] | ✗ | Étiquettes libres (peuvent être héritées du projet) |
+| `dueDate` | date | ✗ | Échéance |
+| `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin effective |
+| `estimatedEffort` | enum | ✗ | T-shirt sizing : `XS` / `S` / `M` / `L` / `XL` (pas d'estimation en heures, trop fragile) |
+| `blockedReason` | text | ✗ | Motif obligatoire si `status=bloquee` |
+| `lastStatusChangeAt` | datetime | ✓ | Pour les indicateurs de stagnation |
+| `publicLabel` | enum | ✗ | Mappage côté demandeur (cf. §3.10 : "Reçu" / "En traitement" / "Traité") — calculé automatiquement depuis `status` mais surchargeable au cas par cas |
+| `createdAt` | datetime | ✓ | |
+| `createdBy` | User | ✓ | |
+| `updatedAt` | datetime | ✓ | |
+| `updatedBy` | User | ✓ | |
+
+#### Cycle de vie
+
+```
+   ┌─────────────┐
+   │   a_faire   │  ← état initial à la création
+   └──────┬──────┘
+          │ démarrer
+          ▼
+   ┌─────────────┐    bloquer (avec motif)    ┌─────────────┐
+   │  en_cours   │  ──────────────────────►   │   bloquee   │
+   │             │  ◄──────────────────────   │             │
+   └──┬──────────┘         débloquer          └─────────────┘
+      │
+      │ envoyer en revue (optionnel)
+      ▼
+   ┌─────────────┐
+   │  en_revue   │
+   └──┬──────┬───┘
+      │      │ rejeter (revient en_cours)
+      │      └────────────────────────────────────► en_cours
+      │ valider
+      ▼
+   ┌─────────────┐
+   │   termine   │  (terminal)
+   └─────────────┘
+
+  À tout moment depuis a_faire / en_cours / en_revue / bloquee :
+                    │
+                    │ annuler
+                    ▼
+              ┌─────────────┐
+              │   annulee   │  (terminal)
+              └─────────────┘
+```
+
+#### Statuts détaillés
+
+| Statut | Signification | Apparaît dans le Kanban |
+|---|---|---|
+| `a_faire` | À démarrer | colonne "À faire" |
+| `en_cours` | En traitement par l'assigné | colonne "En cours" |
+| `bloquee` | Suspendue, motif obligatoire | colonne "Bloquée" (visuel rouge) |
+| `en_revue` | Travail fait, attente validation | colonne "En revue" |
+| `termine` | Validée et clôturée | colonne "Terminé" |
+| `annulee` | Abandonnée | masquée par défaut, filtrable |
+
+#### Règles de transition
+
+- `a_faire → en_cours` : "Démarrer". Si `assignee` est vide, l'utilisateur courant s'assigne.
+- `en_cours → bloquee` : "Bloquer". `blockedReason` obligatoire (champ texte).
+- `bloquee → en_cours` : "Débloquer". Le motif reste consultable dans l'historique.
+- `en_cours → en_revue` : "Envoyer en revue". Optionnel — on peut clôturer directement depuis `en_cours` sur une tâche simple.
+- `en_revue → en_cours` : "Renvoyer". Demande un commentaire.
+- `en_cours | en_revue → termine` : "Clôturer". Renseigne `actualEndDate`. Si une revue est requise (cf. paramètre projet), seuls les utilisateurs autres que l'assignée et créateur peuvent valider depuis `en_revue`. 🟡 À confirmer.
+- `* → annulee` : "Annuler". Demande un motif. Statut terminal.
+- Réouverture d'une tâche `termine` ou `annulee` : interdite. Créer une nouvelle tâche.
+
+#### Contraintes de cycle
+
+- Une tâche ne peut pas changer de statut si son projet est en `en_pause`, `termine` ou `annule`.
+- Si le projet bascule en `annule`, toutes ses tâches non terminales basculent automatiquement en `annulee` (avec un événement audit `task.cascade_cancelled`).
+- Une tâche en `bloquee` depuis plus de N jours apparaît dans le dashboard "alertes" (paramètre, défaut 14 jours).
+
+#### Droits par rôle
+
+| Action | `ROLE_LECTEUR` | `ROLE_AGENT` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
+|---|---|---|---|---|
+| Voir une tâche du projet visible | ✓ | ✓ | ✓ | ✓ |
+| Créer une tâche dans un projet visible | ✗ | ✓ | ✓ | ✓ |
+| Modifier une tâche dont je suis assignee | n/a | ✓ | ✓ | ✓ |
+| Modifier une tâche d'un projet dont je suis owner/coOwner | n/a | ✓ | ✓ | ✓ |
+| Modifier toute tâche | ✗ | ✗ | ✗ | ✓ |
+| Réassigner | ✗ | ✓ (mes tâches) | ✓ (toutes les tâches du projet) | ✓ |
+| Annuler | ✗ | ✗ | ✓ | ✓ |
+
+#### Actions
+
+- Créer, éditer, supprimer (admin uniquement, déclenchée → bascule plutôt en `annulee`)
+- Changer le statut, l'assigné, la priorité
+- Associer / dissocier un demandeur
+- Surcharger les commissions (par défaut héritées du projet)
+- Commenter (Lot 4)
+- Joindre des fichiers (Lot 4)
+- Suivre / ne plus suivre (Lot 4)
+- Exporter (CSV/PDF, Lot 5)
 
 ### 3.3 Jalon (Milestone)
 
@@ -85,7 +291,7 @@ L'utilisateur n'est **pas géré dans l'app** : il est créé/modifié/supprimé
 
 Trace immuable de toutes les actions importantes effectuées dans l'application. **Pas un log technique** (qui va dans `var/log`), mais un journal métier consultable par les admins.
 
-- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `requester` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
+- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `requester` / `commission` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
 - **Immuabilité** : aucun update ni delete via l'app, pas même par un admin. Purge possible uniquement par script DBA / commande après la durée de rétention légale.
 - **Rétention** : 3 ans (à confirmer avec ta DPD).
 - **Consultation** : écran admin avec filtres (catégorie, action, utilisateur, intervalle de dates, sujet) + export CSV.
@@ -129,10 +335,13 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 |---|---|---|
 | `project.created` | Création d'un projet | `{ title, visibility }` |
 | `project.updated` | Édition d'un projet (champs métier) | `{ changes: {field: {old, new}} }` |
-| `project.status_changed` | Transition de statut | `{ from, to }` |
+| `project.status_changed` | Transition de statut | `{ from, to, reason? }` |
 | `project.archived` | Archivage | `{}` |
 | `project.unarchived` | Désarchivage | `{}` |
-| `project.responsible_changed` | Changement de responsable | `{ from, to }` |
+| `project.owner_transferred` | Transfert de l'ownership | `{ from, to }` |
+| `project.coowner_added` / `project.coowner_removed` | Co-responsables | `{ userId }` |
+| `project.commission_linked` / `project.commission_unlinked` | Lien commission | `{ commissionId }` |
+| `project.cascade_cancelled_tasks` | Tâches automatiquement annulées suite à `project.annule` | `{ taskCount }` |
 
 **Catégorie `task`** (Lot 1)
 
@@ -140,11 +349,15 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 |---|---|---|
 | `task.created` | Création | `{ title, projectId, requesterId? }` |
 | `task.updated` | Édition | `{ changes: {...} }` |
-| `task.status_changed` | Transition de statut | `{ from, to }` |
+| `task.status_changed` | Transition de statut | `{ from, to, reason? }` |
+| `task.blocked` | Passage en `bloquee` | `{ reason }` |
+| `task.unblocked` | Sortie de `bloquee` | `{}` |
 | `task.assigned` | (Re)assignation | `{ from, to }` |
 | `task.priority_changed` | Changement de priorité | `{ from, to }` |
 | `task.requester_linked` | Demandeur associé à la tâche | `{ requesterId }` |
 | `task.requester_unlinked` | Demandeur dissocié | `{ requesterId }` |
+| `task.commission_changed` | Modification des commissions associées | `{ added: [...], removed: [...] }` |
+| `task.cascade_cancelled` | Annulée automatiquement par cascade projet | `{ projectId }` |
 | `task.deleted` | Suppression (si autorisée) | `{}` |
 
 **Catégorie `requester`** (Lot 1, complétée Lot 4 et Lot 6)
@@ -161,6 +374,15 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 | `requester.token_revoked` | Révocation du jeton (Lot 6) | `{ reason }` |
 | `requester.portal.viewed` | Accès au portail via jeton (Lot 6) | `{ taskId? }` (volume — voir §filtrage) |
 | `requester.portal.commented` | Commentaire posté depuis le portail (Lot 6) | `{ taskId, commentId }` |
+
+**Catégorie `commission`** (Lot 1)
+
+| Slug | Quand | Payload |
+|---|---|---|
+| `commission.created` | Création d'une commission | `{ name, slug }` |
+| `commission.updated` | Édition d'une commission (hors mapping) | `{ changes: {...} }` |
+| `commission.archived` / `commission.unarchived` | Archivage | `{}` |
+| `commission.mapping_changed` | Modification des `mappedGroups` | `{ added: [...], removed: [...] }` |
 
 **Catégorie `comment`** (Lot 4)
 
@@ -268,7 +490,71 @@ Permet au demandeur, sans compte ni mot de passe, de consulter et commenter sa d
   - Pas d'auto-complétion / cache navigateur (`Cache-Control: no-store`).
 - **Question ouverte** : le demandeur peut-il joindre une pièce (photo de signalement) depuis le portail ? Recommandation : **oui en Lot 6** mais avec scan antivirus + types restreints + taille max 5 Mo.
 
-### 3.11 Menu d'outils externes (lanceur d'applications)
+### 3.11 Commission
+
+Une **commission** représente une instance de travail thématique de la mairie (commission jeunesse, commission urbanisme, commission finances, commission travaux…). Composée d'élus et/ou d'agents, elle peut être responsable de projets et de tâches.
+
+L'appartenance à une commission est **dérivée des groupes Authentik** : un utilisateur appartient à une commission si au moins un de ses groupes Authentik est mappé à cette commission. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
+
+#### Attributs
+
+| Attribut | Type | Obligatoire | Description |
+|---|---|---|---|
+| `id` | UUID v7 | ✓ | |
+| `slug` | string (64) | ✓ | Pour URLs / filtres, ex. `jeunesse`, `urbanisme` |
+| `name` | string (128) | ✓ | Libellé affiché, ex. "Commission Jeunesse" |
+| `description` | text | ✗ | Présentation, périmètre |
+| `color` | string (hex) | ✗ | Pour affichage (badges colorés en liste) |
+| `icon` | string | ✗ | Emoji ou nom d'icône |
+| `mappedGroups` | string[] | ✗ | Liste de **noms de groupes Authentik** mappés à cette commission |
+| `position` | int | ✓ | Ordre d'affichage |
+| `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'une commission dissoute |
+| `createdAt` / `createdBy` / `updatedAt` / `updatedBy` | | ✓ | |
+
+#### Mapping vers les groupes Authentik
+
+- Le mapping est géré par les **admins** depuis l'interface (pas de `.env` : ça évolue à chaque mandat).
+- Pour chaque commission, l'admin saisit (ou choisit dans une liste) **un ou plusieurs noms de groupes Authentik**.
+- Saisie : champ texte multi-valeur. Pas d'autocomplete depuis Authentik en v1 (éviterait un appel API à chaque ouverture du formulaire). En v1.x on pourra brancher l'API Authentik pour suggérer les groupes existants.
+- L'admin peut ajouter/retirer des groupes à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
+
+#### Calcul de l'appartenance
+
+Au login OIDC, on récupère la liste des groupes Authentik de l'utilisateur (claim `groups`). Pour chaque commission active, on vérifie l'intersection avec `mappedGroups` :
+
+```
+userCommissions = [
+  commission for commission in Commission.findActive()
+  if intersect(user.authentikGroups, commission.mappedGroups) != empty
+]
+```
+
+Cette liste est stockée en cache Redis avec TTL aligné sur la session, exposée dans `User::getCommissions()`.
+
+#### Liens avec Project et Task
+
+- **Project** : relation many-to-many `Project ↔ Commission`. Un projet peut être co-piloté par plusieurs commissions (ex. un projet de skate-park concerne Jeunesse + Travaux). Champ optionnel.
+- **Task** : relation many-to-many `Task ↔ Commission`. À la création d'une tâche, les commissions du projet parent sont **héritées par défaut** mais l'utilisateur peut les modifier.
+
+#### Filtrage et navigation
+
+- Filtre "ma/mes commission(s)" sur les listes Projects et Tasks (pré-coché si l'utilisateur appartient à une seule commission).
+- Vue dédiée par commission : `/commissions/<slug>` listant projets + tâches en cours, avec indicateurs (nb projets actifs, tâches en retard…).
+- Affichage des badges commission sur les fiches Project et Task (couleur + nom).
+
+#### Droits
+
+- Voir la liste des commissions : tous les utilisateurs.
+- Créer / éditer / archiver une commission, modifier son mapping : `ROLE_ADMIN` uniquement.
+- Aucune restriction de visibilité Project/Task basée sur l'appartenance commission par défaut (les commissions sont **organisationnelles**, pas un mécanisme de contrôle d'accès — pour ça on a `visibility=restricted` sur le Project).
+
+#### Cas particuliers à anticiper
+
+- **Mapping orphelin** : un groupe Authentik mappé à une commission est supprimé côté Authentik → l'admin voit un avertissement dans la fiche commission (groupe inconnu).
+- **Renommage de groupe Authentik** : casse le mapping. À documenter (changer le mapping côté app après).
+- **Commission sans groupe mappé** : autorisé, mais alors personne n'y appartient sauf manipulations admin futures.
+
+### 3.12 Menu d'outils externes (lanceur d'applications)
 
 Dans la barre de navigation principale, en plus du menu de l'outil, un **menu déroulant** affiche des raccourcis vers d'autres outils internes de la mairie (genre app launcher type "grille Google Apps"). Permet de circuler facilement entre les outils auto-hébergés.
 
@@ -415,3 +701,8 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 9. **Demandeur portail** : autorise-t-on le commentaire depuis le portail (Lot 6) ou consultation seule ? (recommandation : oui, commentaire autorisé, modéré côté agent qui voit les nouveaux commentaires demandeur dans son flux)
 10. **Demandeur portail pièces jointes** : autoriser à joindre une photo (signalement type "trou dans la chaussée") ? (recommandation : oui, mais en Lot 6 avec restrictions strictes)
 11. **Statuts visibles par le demandeur** : tous les statuts internes (`a_faire`, `en_cours`, `en_revue`…) sont-ils exposés tels quels au demandeur, ou faut-il un libellé "demandeur-friendly" ? (recommandation : libellés simplifiés mappés depuis les statuts internes — "Reçu" / "En traitement" / "Traité")
+12. **Tâche en revue** : la transition `en_revue → termine` requiert-elle obligatoirement un valideur différent de l'assigné·e ? Configurable par projet ? (recommandation : non par défaut, on autorise l'auto-validation, sauf si le projet active "revue obligatoire" dans ses paramètres)
+13. **Estimation d'effort** : t-shirt sizes (XS/S/M/L/XL) suffisants ou tu veux une estimation en heures/jours ? (recommandation : t-shirt, plus humain)
+14. **Référence Project/Task** : préfixe `P-`/`T-` ou un autre format (ex. inspiré de l'existant si tu en as) ? Sequence remise à zéro chaque année ? (recommandation : `P-YYYY-NNN` / `T-YYYY-NNNN`, reset annuel)
+15. **Mapping Commission ↔ Authentik** : saisie libre du nom du groupe en v1 (recommandation), ou autocomplete via API Authentik dès le départ (plus de complexité, dépendance réseau au formulaire admin) ?
+16. **Visibilité par commission** : les commissions servent-elles **uniquement** à organiser/filtrer (recommandation), ou veux-tu qu'on puisse rendre un projet visible **uniquement** aux membres d'une commission donnée (ce qui ferait doublon avec `visibility=restricted`, complexifierait les voters) ?

@@ -65,20 +65,45 @@ Squelette technique opérationnel + section administration de base + infrastruct
 
 **Critère de fin** : un nouvel arrivant clone le repo, lance `make install`, se connecte via Authentik, voit ses groupes sur `/profile`. Un admin accède à `/admin`, voit la liste des utilisateurs. Les événements de sécurité sont émis dans Symfony (vérifiable via `bin/console debug:event-dispatcher`). L'application est utilisable confortablement sur smartphone. La CI est verte. Une image taguée `v0.1.0` est publiée sur GHCR.
 
-### Lot 1 — Projets, tâches et demandeurs · `v0.2.0` · 📅 prévu
+### Lot 1 — Projets, tâches, commissions et demandeurs · `v0.2.0` · 📅 prévu
 
-CRUD de base avec assignation, statuts et gestion des demandeurs externes.
+Cœur métier : CRUD de base avec assignation, statuts, commissions et gestion des demandeurs externes. Voir `docs/specifications.md` §3.1 (Project), §3.2 (Task), §3.10 (Requester), §3.11 (Commission) pour les attributs et cycles de vie détaillés.
 
-**Projets et tâches**
+**Commissions** (à faire en premier — Project/Task en dépendent)
 
-- [ ] Entité `Project` + migration + fixtures de dev
-- [ ] Entité `Task` + migration + fixtures de dev
-- [ ] CRUD Project (liste, fiche, créer, éditer, archiver)
+- [ ] Entité `Commission` (slug, name, description, color, icon, mappedGroups, position, archivedAt) + migration + fixtures
+- [ ] CRUD Commission en admin (liste, fiche, créer, éditer, archiver)
+- [ ] Champ multi-valeur "groupes Authentik mappés" (saisie texte libre en v1)
+- [ ] Calcul des commissions de l'utilisateur au login (intersection groupes Authentik ↔ mappedGroups), mis en cache Redis
+- [ ] Méthode `User::getCommissions()` exposée à Twig
+- [ ] Page de liste publique des commissions actives `/commissions`
+- [ ] Vue détaillée `/commissions/<slug>` (sera enrichie avec projets/tâches une fois Project/Task disponibles)
+- [ ] Indicateur "groupe Authentik inconnu" si un mappedGroup n'apparaît jamais dans les logins observés
+
+**Projets**
+
+- [ ] Entité `Project` complète selon §3.1 (reference généré, slug, title, summary, description markdown, status, visibility, restrictedToGroups, owner, coOwners, category, labels, commissions, dates, budget, archivedAt)
+- [ ] Workflow Symfony pour le cycle de vie (5 statuts, transitions définies en §3.1)
+- [ ] CRUD Project (liste paginée, fiche, créer, éditer, archiver/désarchiver)
+- [ ] Filtres liste : statut, visibilité, owner, commission, category, archived ou non
+- [ ] Recherche par référence (`P-2026-014`) ou texte
+- [ ] Voters Project : owner / coOwner / restricted visibility
+- [ ] Transfert d'ownership (modale dédiée + audit)
+- [ ] Duplication d'un projet (copie en `brouillon` sans tâches)
+- [ ] Génération de la référence `P-YYYY-NNN` (incrémentale annuelle, séquence Postgres)
+
+**Tâches**
+
+- [ ] Entité `Task` complète selon §3.2 (reference, title, description, status, priority, project, assignee, requester, commissions héritées, labels, dueDate, estimatedEffort, blockedReason, publicLabel, lastStatusChangeAt)
+- [ ] Workflow Symfony pour le cycle de vie (6 statuts, transitions et garde-fous définis en §3.2)
 - [ ] CRUD Task (liste filtrée par projet, fiche, créer, éditer)
-- [ ] Statuts (workflow Symfony) sur Project et Task
-- [ ] Assignation d'une tâche à un utilisateur
-- [ ] Voters : qui peut éditer quoi
-- [ ] Vue "Mes tâches"
+- [ ] Champ "motif" obligatoire pour les transitions vers `bloquee` et `annulee`
+- [ ] Cascade : annulation automatique des tâches d'un projet `annule`
+- [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule`
+- [ ] Génération de la référence `T-YYYY-NNNN`
+- [ ] Vue "Mes tâches" (assigné = moi) avec onglets par statut
+- [ ] Voters Task : assignée à moi / projet dont je suis owner / admin
+- [ ] Surcharge des commissions au niveau de la tâche (par défaut héritées du projet)
 
 **Demandeurs (Requester)**
 
@@ -93,9 +118,9 @@ CRUD de base avec assignation, statuts et gestion des demandeurs externes.
 
 **Événements et tests**
 
-- [ ] **Émission des événements applicatifs** : `project.*`, `task.*` (incluant `task.requester_linked/unlinked`), `requester.created/updated/anonymized` (cf. `docs/specifications.md` §3.9)
-- [ ] Tests fonctionnels du parcours complet (création projet → tâche → association demandeur)
-- [ ] Vues mobile testées (liste projets en cartes, formulaires adaptés)
+- [ ] **Émission des événements applicatifs** : `commission.*`, `project.*`, `task.*` (incluant `task.requester_linked/unlinked`, `task.cascade_cancelled`), `requester.created/updated/anonymized` (cf. `docs/specifications.md` §3.9)
+- [ ] Tests fonctionnels du parcours complet (création commission → projet → tâche → association demandeur, cascade d'annulation, transitions bloquées par projet en pause)
+- [ ] Vues mobile testées (liste projets en cartes, formulaires adaptés, badges commission)
 
 ### Lot 2 — Audit log et journalisation · `v0.3.0` · 📅 prévu
 
