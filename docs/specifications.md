@@ -49,7 +49,7 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 | `coOwners` | User[] | ✗ | Co-responsables, mêmes droits que le responsable sauf transfert d'ownership |
 | `category` | Category | ✗ | Catégorie principale (taxonomie hiérarchique, cf. §3.6) |
 | `labels` | string[] | ✗ | Étiquettes libres |
-| `commissions` | Commission[] | ✗ | Commissions associées (cf. §3.12) |
+| `workingGroups` | WorkingGroup[] | ✗ | Groupes de travail associés (cf. §3.11) |
 | `startDate` | date | ✗ | Date de début prévisionnelle |
 | `dueDate` | date | ✗ | Date d'échéance prévisionnelle |
 | `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin réelle |
@@ -151,7 +151,7 @@ Une **tâche** est une unité de travail rattachée à un projet. Elle représen
 | `project` | Project | ✓ | Projet parent (cf. question ouverte #1) |
 | `assignee` | User | ✗ | Agent assigné |
 | `requester` | Requester | ✗ | Demandeur externe (cf. §3.10) |
-| `commissions` | Commission[] | ✗ | Héritées du projet par défaut au moment de la création, surchargeables (cf. §3.12) |
+| `workingGroups` | WorkingGroup[] | ✗ | Hérités du projet par défaut au moment de la création, surchargeables (cf. §3.11) |
 | `labels` | string[] | ✗ | Étiquettes libres (peuvent être héritées du projet) |
 | `dueDate` | date | ✗ | Échéance |
 | `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin effective |
@@ -244,7 +244,7 @@ Une **tâche** est une unité de travail rattachée à un projet. Elle représen
 - Créer, éditer, supprimer (admin uniquement, déclenchée → bascule plutôt en `annulee`)
 - Changer le statut, l'assigné, la priorité
 - Associer / dissocier un demandeur
-- Surcharger les commissions (par défaut héritées du projet)
+- Surcharger les groupes de travail (par défaut hérités du projet)
 - Commenter (Lot 4)
 - Joindre des fichiers (Lot 4)
 - Suivre / ne plus suivre (Lot 4)
@@ -291,7 +291,7 @@ L'utilisateur n'est **pas géré dans l'app** : il est créé/modifié/supprimé
 
 Trace immuable de toutes les actions importantes effectuées dans l'application. **Pas un log technique** (qui va dans `var/log`), mais un journal métier consultable par les admins.
 
-- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `requester` / `commission` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
+- **Propriétés** : `id`, `occurredAt`, `category` (`security` / `project` / `task` / `user` / `requester` / `working_group` / `admin` / `comment` / `attachment` / `notification` / `system` / `api`), `action` (slug : `user.login`, `project.created`, `task.assigned`…), `actor` (User, nullable pour événements système), `subjectType` + `subjectId` (objet concerné, nullable), `payload` (JSON contextualisé, ex. ancien et nouveau statut), `ipAddress`, `userAgent`.
 - **Immuabilité** : aucun update ni delete via l'app, pas même par un admin. Purge possible uniquement par script DBA / commande après la durée de rétention légale.
 - **Rétention** : 3 ans (à confirmer avec ta DPD).
 - **Consultation** : écran admin avec filtres (catégorie, action, utilisateur, intervalle de dates, sujet) + export CSV.
@@ -340,7 +340,7 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 | `project.unarchived` | Désarchivage | `{}` |
 | `project.owner_transferred` | Transfert de l'ownership | `{ from, to }` |
 | `project.coowner_added` / `project.coowner_removed` | Co-responsables | `{ userId }` |
-| `project.commission_linked` / `project.commission_unlinked` | Lien commission | `{ commissionId }` |
+| `project.working_group_linked` / `project.working_group_unlinked` | Lien d'un groupe de travail | `{ workingGroupId }` |
 | `project.cascade_cancelled_tasks` | Tâches automatiquement annulées suite à `project.annule` | `{ taskCount }` |
 
 **Catégorie `task`** (Lot 1)
@@ -356,7 +356,7 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 | `task.priority_changed` | Changement de priorité | `{ from, to }` |
 | `task.requester_linked` | Demandeur associé à la tâche | `{ requesterId }` |
 | `task.requester_unlinked` | Demandeur dissocié | `{ requesterId }` |
-| `task.commission_changed` | Modification des commissions associées | `{ added: [...], removed: [...] }` |
+| `task.working_groups_changed` | Modification des groupes de travail associés | `{ added: [...], removed: [...] }` |
 | `task.cascade_cancelled` | Annulée automatiquement par cascade projet | `{ projectId }` |
 | `task.deleted` | Suppression (si autorisée) | `{}` |
 
@@ -375,14 +375,14 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 | `requester.portal.viewed` | Accès au portail via jeton (Lot 6) | `{ taskId? }` (volume — voir §filtrage) |
 | `requester.portal.commented` | Commentaire posté depuis le portail (Lot 6) | `{ taskId, commentId }` |
 
-**Catégorie `commission`** (Lot 1)
+**Catégorie `working_group`** (Lot 1)
 
 | Slug | Quand | Payload |
 |---|---|---|
-| `commission.created` | Création d'une commission | `{ name, slug }` |
-| `commission.updated` | Édition d'une commission (hors mapping) | `{ changes: {...} }` |
-| `commission.archived` / `commission.unarchived` | Archivage | `{}` |
-| `commission.mapping_changed` | Modification des `mappedGroups` | `{ added: [...], removed: [...] }` |
+| `working_group.created` | Création d'un groupe de travail | `{ name, slug }` |
+| `working_group.updated` | Édition (hors mapping Authentik) | `{ changes: {...} }` |
+| `working_group.archived` / `working_group.unarchived` | Archivage | `{}` |
+| `working_group.mapping_changed` | Modification du `authentikGroup` mappé | `{ from, to }` |
 
 **Catégorie `comment`** (Lot 4)
 
@@ -490,69 +490,70 @@ Permet au demandeur, sans compte ni mot de passe, de consulter et commenter sa d
   - Pas d'auto-complétion / cache navigateur (`Cache-Control: no-store`).
 - **Question ouverte** : le demandeur peut-il joindre une pièce (photo de signalement) depuis le portail ? Recommandation : **oui en Lot 6** mais avec scan antivirus + types restreints + taille max 5 Mo.
 
-### 3.11 Commission
+### 3.11 Groupe de travail (WorkingGroup)
 
-Une **commission** représente une instance de travail thématique de la mairie (commission jeunesse, commission urbanisme, commission finances, commission travaux…). Composée d'élus et/ou d'agents, elle peut être responsable de projets et de tâches.
+Un **groupe de travail** est une instance organisationnelle de la mairie qui peut piloter ou être impliquée dans des projets et tâches : commission thématique (jeunesse, urbanisme, finances), service municipal (services techniques, état civil), groupe-projet ad hoc, etc. Le terme "groupe de travail" est volontairement générique pour rester évolutif.
 
-L'appartenance à une commission est **dérivée des groupes Authentik** : un utilisateur appartient à une commission si au moins un de ses groupes Authentik est mappé à cette commission. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
+L'appartenance à un groupe de travail est **dérivée d'un groupe Authentik unique** : un utilisateur appartient au groupe de travail si son groupe Authentik mappé figure dans ses groupes Authentik au login. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
 
 #### Attributs
 
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | |
-| `slug` | string (64) | ✓ | Pour URLs / filtres, ex. `jeunesse`, `urbanisme` |
-| `name` | string (128) | ✓ | Libellé affiché, ex. "Commission Jeunesse" |
-| `description` | text | ✗ | Présentation, périmètre |
+| `slug` | string (64) | ✓ | Pour URLs / filtres, ex. `jeunesse`, `urbanisme`, `services-techniques` |
+| `name` | string (128) | ✓ | Libellé affiché, ex. "Commission Jeunesse", "Services Techniques" |
+| `description` | text | ✗ | Présentation, périmètre, missions |
 | `color` | string (hex) | ✗ | Pour affichage (badges colorés en liste) |
 | `icon` | string | ✗ | Emoji ou nom d'icône |
-| `mappedGroups` | string[] | ✗ | Liste de **noms de groupes Authentik** mappés à cette commission |
+| `authentikGroup` | string (255) | ✗ | Nom du groupe Authentik mappé (un seul). Si vide, le groupe de travail existe mais sans appartenance auto |
 | `position` | int | ✓ | Ordre d'affichage |
-| `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'une commission dissoute |
+| `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'un groupe dissous |
 | `createdAt` / `createdBy` / `updatedAt` / `updatedBy` | | ✓ | |
 
-#### Mapping vers les groupes Authentik
+#### Mapping vers le groupe Authentik
 
-- Le mapping est géré par les **admins** depuis l'interface (pas de `.env` : ça évolue à chaque mandat).
-- Pour chaque commission, l'admin saisit (ou choisit dans une liste) **un ou plusieurs noms de groupes Authentik**.
-- Saisie : champ texte multi-valeur. Pas d'autocomplete depuis Authentik en v1 (éviterait un appel API à chaque ouverture du formulaire). En v1.x on pourra brancher l'API Authentik pour suggérer les groupes existants.
-- L'admin peut ajouter/retirer des groupes à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
+- Un groupe de travail est lié à **0 ou 1 groupe Authentik** (relation 1-1 optionnelle).
+- Le mapping est géré par les **admins** depuis l'interface (pas de `.env` : ça évolue avec l'organigramme).
+- Saisie : champ texte simple. Pas d'autocomplete depuis Authentik en v1 (éviterait un appel API à chaque ouverture du formulaire). En v1.x on pourra brancher l'API Authentik pour suggérer les groupes existants.
+- L'admin peut modifier le groupe Authentik mappé à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
+- Plusieurs groupes de travail **peuvent** pointer vers le même groupe Authentik (ex. plusieurs entités liées au même groupe "élus") — c'est autorisé mais signalé en avertissement dans l'admin.
 
 #### Calcul de l'appartenance
 
-Au login OIDC, on récupère la liste des groupes Authentik de l'utilisateur (claim `groups`). Pour chaque commission active, on vérifie l'intersection avec `mappedGroups` :
+Au login OIDC, on récupère la liste des groupes Authentik de l'utilisateur (claim `groups`). Pour chaque groupe de travail actif et mappé, on vérifie si son `authentikGroup` figure dans la liste :
 
 ```
-userCommissions = [
-  commission for commission in Commission.findActive()
-  if intersect(user.authentikGroups, commission.mappedGroups) != empty
+userWorkingGroups = [
+  wg for wg in WorkingGroup.findActive()
+  if wg.authentikGroup in user.authentikGroups
 ]
 ```
 
-Cette liste est stockée en cache Redis avec TTL aligné sur la session, exposée dans `User::getCommissions()`.
+Cette liste est stockée en cache Redis avec TTL aligné sur la session, exposée dans `User::getWorkingGroups()`.
 
 #### Liens avec Project et Task
 
-- **Project** : relation many-to-many `Project ↔ Commission`. Un projet peut être co-piloté par plusieurs commissions (ex. un projet de skate-park concerne Jeunesse + Travaux). Champ optionnel.
-- **Task** : relation many-to-many `Task ↔ Commission`. À la création d'une tâche, les commissions du projet parent sont **héritées par défaut** mais l'utilisateur peut les modifier.
+- **Project** : relation many-to-many `Project ↔ WorkingGroup`. Un projet peut être co-piloté par plusieurs groupes de travail (ex. un projet de skate-park concerne Jeunesse + Services Techniques). Champ optionnel.
+- **Task** : relation many-to-many `Task ↔ WorkingGroup`. À la création d'une tâche, les groupes de travail du projet parent sont **hérités par défaut** mais l'utilisateur peut les modifier.
 
 #### Filtrage et navigation
 
-- Filtre "ma/mes commission(s)" sur les listes Projects et Tasks (pré-coché si l'utilisateur appartient à une seule commission).
-- Vue dédiée par commission : `/commissions/<slug>` listant projets + tâches en cours, avec indicateurs (nb projets actifs, tâches en retard…).
-- Affichage des badges commission sur les fiches Project et Task (couleur + nom).
+- Filtre "mon/mes groupe(s) de travail" sur les listes Projects et Tasks (pré-coché si l'utilisateur n'appartient qu'à un seul).
+- Vue dédiée par groupe : `/groupes-de-travail/<slug>` listant projets + tâches en cours, avec indicateurs (nb projets actifs, tâches en retard…).
+- Affichage des badges sur les fiches Project et Task (couleur + nom).
 
 #### Droits
 
-- Voir la liste des commissions : tous les utilisateurs.
-- Créer / éditer / archiver une commission, modifier son mapping : `ROLE_ADMIN` uniquement.
-- Aucune restriction de visibilité Project/Task basée sur l'appartenance commission par défaut (les commissions sont **organisationnelles**, pas un mécanisme de contrôle d'accès — pour ça on a `visibility=restricted` sur le Project).
+- Voir la liste des groupes de travail : tous les utilisateurs.
+- Créer / éditer / archiver un groupe de travail, modifier son mapping Authentik : `ROLE_ADMIN` uniquement.
+- Aucune restriction de visibilité Project/Task basée sur l'appartenance par défaut (les groupes de travail sont **organisationnels**, pas un mécanisme de contrôle d'accès — pour ça, utiliser `visibility=restricted` sur le Project).
 
 #### Cas particuliers à anticiper
 
-- **Mapping orphelin** : un groupe Authentik mappé à une commission est supprimé côté Authentik → l'admin voit un avertissement dans la fiche commission (groupe inconnu).
-- **Renommage de groupe Authentik** : casse le mapping. À documenter (changer le mapping côté app après).
-- **Commission sans groupe mappé** : autorisé, mais alors personne n'y appartient sauf manipulations admin futures.
+- **Mapping orphelin** : le groupe Authentik mappé n'existe plus côté Authentik → l'admin voit un avertissement dans la fiche (groupe inconnu, plus aucun utilisateur identifié).
+- **Renommage du groupe Authentik** : casse le mapping. À documenter (mettre à jour le champ `authentikGroup` après).
+- **Groupe de travail sans groupe Authentik mappé** : autorisé, sert simplement de tag organisationnel sans appartenance automatique calculée.
 
 ### 3.12 Menu d'outils externes (lanceur d'applications)
 
@@ -704,5 +705,5 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 12. **Tâche en revue** : la transition `en_revue → termine` requiert-elle obligatoirement un valideur différent de l'assigné·e ? Configurable par projet ? (recommandation : non par défaut, on autorise l'auto-validation, sauf si le projet active "revue obligatoire" dans ses paramètres)
 13. **Estimation d'effort** : t-shirt sizes (XS/S/M/L/XL) suffisants ou tu veux une estimation en heures/jours ? (recommandation : t-shirt, plus humain)
 14. **Référence Project/Task** : préfixe `P-`/`T-` ou un autre format (ex. inspiré de l'existant si tu en as) ? Sequence remise à zéro chaque année ? (recommandation : `P-YYYY-NNN` / `T-YYYY-NNNN`, reset annuel)
-15. **Mapping Commission ↔ Authentik** : saisie libre du nom du groupe en v1 (recommandation), ou autocomplete via API Authentik dès le départ (plus de complexité, dépendance réseau au formulaire admin) ?
-16. **Visibilité par commission** : les commissions servent-elles **uniquement** à organiser/filtrer (recommandation), ou veux-tu qu'on puisse rendre un projet visible **uniquement** aux membres d'une commission donnée (ce qui ferait doublon avec `visibility=restricted`, complexifierait les voters) ?
+15. **Mapping Groupe de travail ↔ Authentik** : saisie libre du nom du groupe en v1 (recommandation), ou autocomplete via API Authentik dès le départ (plus de complexité, dépendance réseau au formulaire admin) ?
+16. **Visibilité par groupe de travail** : les groupes de travail servent-ils **uniquement** à organiser/filtrer (recommandation), ou veux-tu qu'on puisse rendre un projet visible **uniquement** aux membres d'un groupe de travail donné (ce qui ferait doublon avec `visibility=restricted`, complexifierait les voters) ?
