@@ -43,7 +43,20 @@ RUN install-php-extensions xdebug
 # par défaut, etc.)
 COPY docker/php/conf.d-dev/zz-dev.ini $PHP_INI_DIR/conf.d/zz-dev.ini
 
+# Composer install des dépendances dans /app/vendor.
+# --no-scripts car le code source n'est pas encore présent (il sera monté en
+# volume au runtime via docker-compose.dev.yml).
+# Le volume nommé `vendor` déclaré dans le compose dev sera initialisé
+# automatiquement avec ce /app/vendor au premier `docker compose up`.
+COPY composer.json composer.lock symfony.lock ./
+RUN set -eux; \
+    composer install --no-scripts --no-interaction --prefer-dist; \
+    composer clear-cache
+
 # Pas de COPY de sources ici : le compose dev monte . sur /app via volume.
+# Au runtime, l'utilisateur fait `make install` (ou `composer install` dans
+# le conteneur) pour ré-exécuter les scripts Symfony (cache:clear,
+# assets:install) avec le code source disponible.
 
 # =============================================================================
 # Stage 3 — prod : sources copiées, mode worker, opcache preload
