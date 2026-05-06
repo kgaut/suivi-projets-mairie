@@ -22,8 +22,15 @@ security:
             oidc:
                 client: default
                 user_identifier_property: sub
-                # Logout SSO Authentik géré par l'issue #27 (pour l'instant logout local seul).
-                enable_end_session_listener: false
+                # Logout SSO Authentik via le LogoutEvent (cf. drenso
+                # OidcEndSessionSubscriber). Au /logout, la session locale
+                # Symfony est invalidée puis l'utilisateur est redirigé vers
+                # `end_session_endpoint` d'Authentik avec l'id_token_hint et
+                # `post_logout_redirect_uri = logout.target` (cf. ci-dessous).
+                # Authentik doit avoir l'URL post-logout autorisée dans la
+                # config du provider (cf. docs/authentik.md §1.1).
+                enable_end_session_listener: true
+                use_logout_target_path: true
                 # Sur échec d'auth (notamment OidcAccessGuard qui rejette via
                 # CustomUserMessageAuthenticationException), on redirige vers
                 # /access-denied au lieu de /login (qui ferait une boucle).
@@ -31,6 +38,8 @@ security:
 
             logout:
                 path: app_logout
+                # Cible pour la session locale ET URL passée à Authentik
+                # comme `post_logout_redirect_uri` (cf. enable_end_session_listener)
                 target: /
 
     access_control:

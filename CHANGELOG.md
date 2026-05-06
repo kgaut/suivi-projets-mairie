@@ -19,6 +19,7 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Logout SSO Authentik** (cf. specs §5.3) : `enable_end_session_listener: true` sur le firewall OIDC drenso. Le `LogoutEvent` Symfony déclenche automatiquement la redirection vers `end_session_endpoint` Authentik avec `id_token_hint` et `post_logout_redirect_uri = logout.target` (par défaut `/`). Le user est déconnecté à la fois côté app ET côté IdP. `docs/authentik.md` §1.1 et §2.4 mis à jour pour documenter le pré-requis "Post-logout Redirect URIs" côté provider Authentik
 - **Filtrage d'accès `OIDC_REQUIRED_GROUPS`** (defense in depth, cf. specs §5.3) :
   - `App\Security\OidcAccessGuard` — service qui parse la liste CSV des groupes requis et vérifie l'intersection avec les groupes Authentik de l'utilisateur. Si vide → throw `CustomUserMessageAuthenticationException` qui interrompt l'auth, et marque la projection locale `disabledAt` (préserve l'historique sans permettre une nouvelle session)
   - Branché dans `OidcUserProvider::ensureUserExists` après création/maj du user
