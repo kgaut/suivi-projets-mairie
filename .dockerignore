@@ -1,0 +1,52 @@
+# Exclusions du contexte Docker — garde les builds rapides et les images légères
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Doc et CI (pas nécessaires à l'exécution applicative)
+docs/
+.github/
+.gitlab-ci.yml
+README.md
+CHANGELOG.md
+LICENSE
+
+# Templates / exemples
+.env.local
+.env.local.php
+.env.*.local
+docker-compose.yml
+docker-compose.override.yml
+
+# Dépendances et caches (régénérés dans l'image)
+vendor/
+node_modules/
+var/
+public/build/
+public/bundles/
+
+# Outillage qualité (pas nécessaire à l'exécution)
+phpstan.neon.dist
+phpstan.neon
+phpunit.dist.xml
+phpunit.xml
+.php-cs-fixer.dist.php
+.php-cs-fixer.cache
+.twig-cs-fixer.dist.php
+rector.php
+deptrac.yaml
+grumphp.yml
+Makefile
+.editorconfig
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+
+# Tests et fixtures de dev
+tests/

@@ -1,6 +1,9 @@
-# Squelette de stack docker compose pour le développement local.
-# Sera finalisé au Lot 0 (le Dockerfile dev n'existe pas encore).
-# Renommer en `docker-compose.dev.yml` une fois le squelette Symfony en place.
+# Stack docker compose pour le développement local.
+#
+# Démarrage :
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Voir docs/local-dev.md §3 pour le TLS local sur https://spm.localhost.
 
 services:
   app:
@@ -9,9 +12,12 @@ services:
       dockerfile: docker/Dockerfile
       target: dev
       args:
-        XDEBUG_VERSION: "3.3"
+        XDEBUG_VERSION: "3.4"
     restart: unless-stopped
-    env_file: .env.local
+    # .env.local optionnel : vars d'override personnelles, créées au besoin
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       APP_ENV: dev
       APP_DEBUG: 1
@@ -20,6 +26,9 @@ services:
       SERVER_NAME: ${DEV_SERVER_NAME:-spm.localhost}
       XDEBUG_MODE: ${XDEBUG_MODE:-off}
       XDEBUG_CLIENT_HOST: ${XDEBUG_CLIENT_HOST:-host.docker.internal}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-spm}:${POSTGRES_PASSWORD:-spm}@postgres:5432/${POSTGRES_DB:-spm}?serverVersion=16&charset=utf8
+      REDIS_URL: redis://redis:6379
+      MAILER_DSN: smtp://mailpit:1025
     ports:
       - "80:80"
       - "443:443"
@@ -74,8 +83,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "8025:8025"  # UI
-      - "1025:1025"  # SMTP
+      - "8025:8025"  # UI web : http://localhost:8025
+      - "1025:1025"  # SMTP (utilisé par MAILER_DSN ci-dessus)
     environment:
       MP_MAX_MESSAGES: 5000
 
