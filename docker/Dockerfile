@@ -34,9 +34,10 @@ FROM base AS dev
 ENV APP_ENV=dev \
     APP_DEBUG=1
 
-# Xdebug 3.x, version pilotée par le build arg (cf. docker-compose.dev.yml)
-ARG XDEBUG_VERSION=3.4
-RUN install-php-extensions xdebug-${XDEBUG_VERSION}
+# Xdebug : on prend la dernière version compatible PHP 8.4 fournie par
+# install-php-extensions. Pour pinner une version précise, remplacer par
+# `xdebug-3.4.5` (format X.Y.Z requis par mlocati/install-php-extensions).
+RUN install-php-extensions xdebug
 
 # Confs PHP spécifiques au dev (opcache validate_timestamps, Xdebug désactivé
 # par défaut, etc.)
