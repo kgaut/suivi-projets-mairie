@@ -27,6 +27,7 @@ Outil interne de gestion de projet pour une mairie : suivi des projets numériqu
 | Mise en place de l'environnement local | [`docs/local-dev.md`](docs/local-dev.md) |
 | Outils qualité et conventions de code | [`docs/qualite.md`](docs/qualite.md) |
 | Workflow de contribution (issue → PR) | [`docs/workflow.md`](docs/workflow.md) |
+| Historique des versions | [`CHANGELOG.md`](CHANGELOG.md) |
 
 ## Démarrage rapide (à venir)
 
