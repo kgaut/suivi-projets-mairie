@@ -10,7 +10,9 @@
 
 ## Lots planifiés
 
-### Lot 0 — Fondations · `v0.1.0` · 📅 prévu
+### Lot 0 — Fondations · `v0.1.0` · 🚧 en cours
+
+> 📋 **Cadrage opérationnel détaillé** : [`docs/lots/lot-0-cadrage.md`](lots/lot-0-cadrage.md) (vagues, choix techniques précis, plan d'attaque côté issues, questions ouvertes spécifiques).
 
 Squelette technique opérationnel + section administration de base + infrastructure d'audit log. Pas encore de gestion de projets/tâches.
 
