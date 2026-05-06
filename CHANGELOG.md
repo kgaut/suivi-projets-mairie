@@ -39,6 +39,7 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - `src/Twig/Components/HelloLive.php` + `templates/components/HelloLive.html.twig` : démo Live Component (compteur incrémenté côté serveur)
 - `assets/controllers/hello_controller.js` : démo Stimulus côté client (toggle de message)
 - Page d'accueil refondue avec Tailwind + démos Stimulus et Live Component côté à côté
+- Layout Twig responsive mobile-first : `templates/_partials/_header.html.twig` (logo, burger menu CSS-only ≥ 1024 px), `_nav.html.twig`, `_footer.html.twig`. Skip link "Aller au contenu" pour l'accessibilité (RGAA), structure HTML5 sémantique (`<header>`, `<main>`, `<footer>`, `<nav>` avec `aria-label`), `lang="fr"`, `theme-color`. Burger en `<input type="checkbox" class="peer">` + `peer-checked:flex` Tailwind (pas de JS, accessible via label associé)
 
 ### Changed
 

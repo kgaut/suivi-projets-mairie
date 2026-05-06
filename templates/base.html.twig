@@ -5,6 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>{% block title %}Suivi Projets Mairie{% endblock %}</title>
         <meta name="description" content="{% block meta_description %}Outil interne de gestion de projet pour la mairie.{% endblock %}">
+        <meta name="theme-color" content="#1e293b">
 
         {% block stylesheets %}{% endblock %}
         {% block javascripts %}{% endblock %}
@@ -17,7 +18,17 @@
         <script src="https://cdn.jsdelivr.net/npm/frankenphp-hot-reload/+esm" type="module"></script>
         {% endif %}
     </head>
-    <body>
-        {% block body %}{% endblock %}
+    <body class="flex min-h-screen flex-col bg-slate-50 text-slate-900 antialiased">
+        <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded-md focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg focus:outline focus:outline-2 focus:outline-indigo-600">
+            Aller au contenu principal
+        </a>
+
+        {% include '_partials/_header.html.twig' %}
+
+        <main id="main" class="flex-1">
+            {% block body %}{% endblock %}
+        </main>
+
+        {% include '_partials/_footer.html.twig' %}
     </body>
 </html>
