@@ -17,3 +17,8 @@
 /docker-compose.yml
 /docker-compose.override.yml
 ###< docker compose overrides ###
+
+###> symfony/asset-mapper ###
+/public/assets/
+/assets/vendor/
+###< symfony/asset-mapper ###
