@@ -16,7 +16,7 @@ Toute modification de code passe par ce cycle. Pas de push direct sur `main` (br
 | Branche | Rôle |
 |---|---|
 | `main` | Branche de référence, toujours déployable, protégée |
-| `feat/<n°>-<slug>` | Nouvelle fonctionnalité (`feat/42-projet-archivage`) |
+| `feature/<n°>-<slug>` | Nouvelle fonctionnalité (`feature/42-projet-archivage`) |
 | `fix/<n°>-<slug>` | Correctif (`fix/57-mauvais-mapping-roles`) |
 | `chore/<n°>-<slug>` | Tâche technique sans impact fonctionnel (`chore/12-bump-symfony`) |
 | `docs/<n°>-<slug>` | Doc seule (`docs/3-precision-rgpd`) |
@@ -44,7 +44,7 @@ Template d'issue à fournir dans `.github/ISSUE_TEMPLATE/feature.yml` (Lot 0).
 ```bash
 git checkout main
 git pull --ff-only
-git checkout -b feat/42-projet-archivage
+git checkout -b feature/42-projet-archivage
 ```
 
 ### 3.3 Commits
@@ -63,7 +63,7 @@ Un commit = une idée. On ne s'interdit pas plusieurs commits par PR si ça raco
 ### 3.4 Push et PR
 
 ```bash
-git push -u origin feat/42-projet-archivage
+git push -u origin feature/42-projet-archivage
 ```
 
 Une fois la branche poussée, ouverture d'une **PR** avec :
@@ -152,7 +152,7 @@ git push origin v0.1.1
 
 | Élément | Format | Exemple |
 |---|---|---|
-| Branche | `<type>/<n°>-<slug-court>` | `feat/42-archivage-projet` |
+| Branche | `<type>/<n°>-<slug-court>` | `feature/42-archivage-projet` |
 | Issue | titre court à l'infinitif | "Permettre l'archivage d'un projet" |
 | PR | `<type>: <titre> (#<n°>)` | `feat: ajoute l'archivage d'un projet (#42)` |
 | Commit | conventional commits | `feat: ajoute l'archivage d'un projet` |

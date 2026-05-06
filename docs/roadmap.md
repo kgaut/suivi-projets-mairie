@@ -5,7 +5,7 @@
 ## Convention
 
 - Un **lot** = un ensemble cohérent de tâches livrables ensemble = **un tag** sur `main`.
-- Une **tâche** = une issue GitHub = une branche `feat/<n°>-<slug>` = une PR.
+- Une **tâche** = une issue GitHub = une branche `feature/<n°>-<slug>` (ou `fix/`, `chore/`, `docs/`) = une PR.
 - Statut des lots : `📅 prévu` / `🚧 en cours` / `✅ livré`.
 
 ## Lots planifiés
