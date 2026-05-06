@@ -15,14 +15,22 @@ services:
     environment:
       APP_ENV: dev
       APP_DEBUG: 1
+      # FrankenPHP / Caddy : nom de domaine local + TLS automatique (CA Caddy interne).
+      # Voir docs/local-dev.md §3.1 pour installer la CA dans le trust store du host.
+      SERVER_NAME: ${DEV_SERVER_NAME:-spm.localhost}
       XDEBUG_MODE: ${XDEBUG_MODE:-off}
       XDEBUG_CLIENT_HOST: ${XDEBUG_CLIENT_HOST:-host.docker.internal}
     ports:
-      - "8080:80"
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
     volumes:
       - .:/app:cached
       # Volume nommé pour vendor pour ne pas écraser ce qui est dans l'image
       - vendor:/app/vendor
+      # Persiste la CA Caddy locale et les certificats générés entre redémarrages
+      - caddy_data:/data
+      - caddy_config:/config
     extra_hosts:
       # Permet d'utiliser host.docker.internal sous Linux
       - "host.docker.internal:host-gateway"
@@ -75,3 +83,5 @@ volumes:
   pgdata:
   redisdata:
   vendor:
+  caddy_data:
+  caddy_config:

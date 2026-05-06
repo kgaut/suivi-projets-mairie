@@ -18,6 +18,7 @@ Squelette technique opérationnel + section administration de base + infrastruct
 
 - [ ] `composer create-project symfony/skeleton` + structure `src/` (Controller / Application / Domain / Infrastructure / Security)
 - [ ] Dockerfile FrankenPHP + `docker-compose.dev.yml` + `docker-compose.prod.yml`
+- [ ] **TLS local en dev** : FrankenPHP/Caddy sert sur `https://spm.localhost` (variable `DEV_SERVER_NAME` surchargeable), CA Caddy persistée dans le volume `caddy_data`, doc d'install dans le trust store (cf. `docs/local-dev.md` §3)
 - [ ] `Makefile` (install, migrate, test, stan, cs, shell, reset)
 - [ ] Configuration Doctrine + Postgres + premières migrations
 - [ ] Configuration Redis (cache + sessions + Messenger)

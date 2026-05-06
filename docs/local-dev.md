@@ -34,12 +34,57 @@ L'application est ensuite accessible sur :
 
 | Service | URL |
 |---|---|
-| App | <http://localhost:8080> |
+| App | <https://spm.localhost> (HTTPS, voir §3 pour le TLS local) |
 | Mailpit (interface mail dev) | <http://localhost:8025> |
 | Postgres | `localhost:5432` (user/pass dans `.env.local`) |
 | Redis | `localhost:6379` |
 
-## 3. Stack dev (`docker-compose.dev.yml`)
+> Pourquoi `spm.localhost` ? Le TLD `.localhost` est résolu automatiquement vers `127.0.0.1` (RFC 6761) — pas besoin d'éditer `/etc/hosts`. Si tu préfères un domaine type `projets.mairie.test`, surcharge `DEV_SERVER_NAME` dans `.env.local` et ajoute la ligne correspondante à ton `/etc/hosts`.
+
+## 3. TLS local (au plus près de la prod)
+
+L'app dev est servie en **HTTPS** par FrankenPHP/Caddy, comme en prod. Caddy génère un certificat signé par sa propre CA locale, persistée dans le volume `caddy_data` (donc pas régénérée à chaque `docker compose up`).
+
+### 3.1 Première configuration : approuver la CA Caddy
+
+Au tout premier démarrage, ton navigateur va afficher un warning de sécurité parce que la CA Caddy n'est pas connue. Pour l'approuver une fois pour toutes (recommandé) :
+
+```bash
+# Récupère le certificat racine Caddy depuis le conteneur
+docker compose -f docker-compose.dev.yml exec app cat /data/caddy/pki/authorities/local/root.crt > /tmp/caddy-root.crt
+
+# Linux (Debian/Ubuntu)
+sudo cp /tmp/caddy-root.crt /usr/local/share/ca-certificates/caddy-local.crt
+sudo update-ca-certificates
+
+# macOS
+sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain /tmp/caddy-root.crt
+
+# Windows (PowerShell admin)
+Import-Certificate -FilePath C:\path\to\caddy-root.crt -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+Pour Firefox (qui a son propre trust store) : `Préférences → Confidentialité et sécurité → Certificats → Voir les certificats → Autorités → Importer`.
+
+> **Alternative** : si tu préfères [mkcert](https://github.com/FiloSottile/mkcert), tu peux générer ton propre certificat et le monter dans le conteneur (volume `./docker/dev/certs:/etc/caddy/certs`) puis ajouter une directive `tls /etc/caddy/certs/spm.crt /etc/caddy/certs/spm.key` au `Caddyfile` dev. À configurer au Lot 0 si tu pars sur cette approche.
+
+### 3.2 Domaine personnalisé
+
+Pour utiliser un autre domaine que `spm.localhost` (ex. `projets.mairie.test`) :
+
+```dotenv
+# .env.local
+DEV_SERVER_NAME=projets.mairie.test
+```
+
+```bash
+# /etc/hosts
+127.0.0.1 projets.mairie.test
+```
+
+Puis `docker compose -f docker-compose.dev.yml up -d` régénère le certificat pour ce domaine.
+
+## 4. Stack dev (`docker-compose.dev.yml`)
 
 Services lancés :
 
@@ -50,7 +95,7 @@ Services lancés :
 
 Voir `docker-compose.dev.yml.example` à la racine pour le squelette.
 
-## 4. Commandes courantes (Makefile)
+## 5. Commandes courantes (Makefile)
 
 ```bash
 make help       # liste toutes les cibles
@@ -84,17 +129,19 @@ make clean      # docker compose down -v (DESTRUCTIF : perte de la BDD)
 
 Toutes ces cibles wrappent `docker compose exec app …`, donc tu n'as jamais à invoquer Docker manuellement.
 
-## 5. Authentik en dev
+## 6. Authentik en dev
 
 Tu as deux options :
 
-### 5.1 Utiliser ton instance Authentik existante (recommandé)
+### 6.1 Utiliser ton instance Authentik existante (recommandé)
 
-1. Crée un **second provider** dans ton Authentik avec `Redirect URI = http://localhost:8080/oidc/callback`.
+1. Crée un **second provider** dans ton Authentik avec `Redirect URI = https://spm.localhost/oidc/callback` (ou ton `DEV_SERVER_NAME` personnalisé).
 2. Reporte les `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` dans `.env.local`.
 3. Conserve les mêmes groupes que la prod, ou crée des groupes `dev-*` selon ta préférence.
 
-### 5.2 Lancer une Authentik locale
+> ⚠️ Authentik exige des Redirect URIs en `https://` (sauf pour `http://localhost`). Avec `spm.localhost` en HTTPS, c'est conforme et tu profites du même flow OIDC qu'en prod (cookies `Secure`, etc.).
+
+### 6.2 Lancer une Authentik locale
 
 Si tu veux tester sans dépendre du serveur principal :
 
@@ -110,7 +157,7 @@ Configure ensuite l'app pour pointer vers `http://localhost:9000`.
 
 > Mode "stub" : si tu veux développer sans Authentik du tout, on peut prévoir un `OIDC_DRIVER=fake` qui simule un user `dev@local`. À implémenter au Lot 0 si tu juges utile.
 
-## 6. Xdebug
+## 7. Xdebug
 
 Xdebug est désactivé par défaut (impact perfs). Pour l'activer :
 
@@ -125,7 +172,7 @@ docker compose -f docker-compose.dev.yml restart app
 
 Configuration côté IDE : path mapping `/app` → racine du repo, port 9003.
 
-## 7. Tests
+## 8. Tests
 
 ```bash
 make test                           # tous
@@ -135,22 +182,24 @@ make test-coverage                  # avec couverture HTML dans var/coverage/
 
 Les tests fonctionnels utilisent une **base dédiée** (`spm_test`) recréée avant chaque run, isolée de la BDD de dev.
 
-## 8. Réinitialisation totale
+## 9. Réinitialisation totale
 
 Si tu veux repartir de zéro :
 
 ```bash
-make clean        # détruit les conteneurs ET les volumes (BDD perdue)
+make clean        # détruit les conteneurs ET les volumes (BDD + CA Caddy perdues)
 make install      # repart à neuf
 ```
 
-## 9. Outils IDE recommandés
+> ⚠️ `make clean` détruit aussi le volume `caddy_data` qui contient la CA locale. Tu devras donc ré-approuver la nouvelle CA dans ton trust store (cf. §3.1).
+
+## 10. Outils IDE recommandés
 
 - **VS Code** : extensions `PHP Intelephense`, `Symfony for VSCode`, `Twig Language 2`, `Stimulus`
 - **PhpStorm** : déjà tout en natif, activer Symfony plugin et Stimulus plugin
 - Configuration `.editorconfig` fournie à la racine
 
-## 10. Astuces
+## 11. Astuces
 
 - Les sources sont montées en volume → pas besoin de rebuild l'image après modification de code PHP/Twig.
 - Pour un changement de dépendance (`composer.json`), `make install` suffit.

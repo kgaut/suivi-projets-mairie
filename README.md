@@ -40,7 +40,7 @@ docker compose -f docker-compose.dev.yml up -d
 make install
 ```
 
-L'application sera disponible sur <http://localhost:8080>, Mailpit sur <http://localhost:8025>.
+L'application sera disponible en HTTPS sur <https://spm.localhost> (TLS local via Caddy — voir [`docs/local-dev.md`](docs/local-dev.md) §3 pour approuver la CA), Mailpit sur <http://localhost:8025>.
 
 Voir [`docs/local-dev.md`](docs/local-dev.md) pour le détail.
 
