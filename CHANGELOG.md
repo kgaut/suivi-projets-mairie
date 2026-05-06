@@ -19,6 +19,13 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Authentification OIDC via `drenso/symfony-oidc-bundle`** :
+  - Bundle enregistré, `config/packages/drenso_oidc.yaml` qui lit `OIDC_WELL_KNOWN_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` depuis l'env, PKCE activé (`code_challenge_method: S256`), cache jwks et well-known 1 h
+  - `security.yaml` réécrit : firewall `main` avec authenticator `oidc:` drenso, provider applicatif `App\Security\OidcUserProvider`, access_control basique (`/login`, `/access-denied` publics, reste `ROLE_USER`)
+  - `App\Security\OidcUserProvider` qui implémente `OidcUserProviderInterface` (drenso) et `UserProviderInterface` (Symfony) : réconciliation au login (création si nouveau, mise à jour des champs Authentik à chaque connexion : `username`, `email`, `displayName`, `groupsSnapshot`, `lastLoginAt`), calcul de `ROLE_ADMIN` si l'utilisateur est dans `OIDC_ADMIN_GROUP`
+  - Routes `/login` (redirige vers Authentik via `OidcClientInterface::generateAuthorizationRedirect()`), `/logout` (intercepté par le firewall), `/access-denied` (page minimaliste, à enrichir issue #23)
+  - Variables d'env `OIDC_WELL_KNOWN_URL` / `OIDC_REDIRECT_URI` / `OIDC_ADMIN_GROUP` etc. dans `.env` et `.env.example`
+  - Tests unitaires `App\Tests\Security\OidcUserProviderTest` (7 tests, 30 assertions) couvrant création, mise à jour, ROLE_ADMIN, claim `groups` absent, loadUserByIdentifier, supportsClass
 - **Entité `App\Domain\User`** (projection locale d'Authentik) — PK Uuid v7, `authentikId` unique, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, attributs avatar (`avatarPath`, `authentikAvatarSourceUrl`, `authentikAvatarPath`, `authentikAvatarFetchedAt`), `avatarSource`, `gravatarAllowed`, `createdAt`, `updatedAt`. Implémente `Symfony\Component\Security\Core\User\UserInterface` avec `getUserIdentifier()` retournant `authentikId` (clé stable)
 - **Enum `App\Domain\Enum\AvatarSource`** : `AUTO` / `LOCAL` / `AUTHENTIK` / `GRAVATAR` / `INITIALS`
 - **`App\Infrastructure\Repository\UserRepository`** avec `findOneByAuthentikId()` pour la réconciliation au login
