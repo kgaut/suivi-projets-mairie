@@ -45,7 +45,7 @@ final class OidcUserProviderTest extends TestCase
             ->with('sub-new')
             ->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $provider->ensureUserExists('sub-new', new OidcUserData([
             'sub' => 'sub-new',
@@ -81,7 +81,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $provider->ensureUserExists('sub-admin', new OidcUserData([
             'sub' => 'sub-admin',
@@ -107,7 +107,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn($existing);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $provider->ensureUserExists('sub-existing', new OidcUserData([
             'sub' => 'sub-existing',
@@ -138,7 +138,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $provider->ensureUserExists('sub-x', new OidcUserData([
             'sub' => 'sub-x',
@@ -164,7 +164,7 @@ final class OidcUserProviderTest extends TestCase
             ->with('sub-found')
             ->willReturn($existing);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $this->assertSame($existing, $provider->loadUserByIdentifier('sub-found'));
     }
@@ -175,7 +175,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $this->expectException(UserNotFoundException::class);
         $provider->loadUserByIdentifier('sub-missing');
@@ -185,7 +185,7 @@ final class OidcUserProviderTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $repo = $this->createMock(UserRepository::class);
-        $provider = new OidcUserProvider($repo, $em, 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new \App\Security\OidcAccessGuard('', $em), 'admin_spm');
 
         $this->assertTrue($provider->supportsClass(User::class));
         $this->assertFalse($provider->supportsClass(\stdClass::class));

@@ -12,6 +12,11 @@ parameters:
     # (Project / Task). Configurable via .env / .env.local.
     app.oidc_admin_group: '%env(OIDC_ADMIN_GROUP)%'
 
+    # Filtrage defense in depth (cf. specs §5.3) : liste CSV de groupes Authentik
+    # dont l'utilisateur doit être membre pour se connecter à l'app. Vide → pas
+    # de filtrage côté app (mais Policy Binding Authentik reste en place).
+    app.oidc_required_groups: '%env(OIDC_REQUIRED_GROUPS)%'
+
 services:
     # default configuration for services in *this* file
     _defaults:
@@ -29,6 +34,10 @@ services:
     App\Security\OidcUserProvider:
         arguments:
             $adminGroup: '%app.oidc_admin_group%'
+
+    App\Security\OidcAccessGuard:
+        arguments:
+            $requiredGroupsCsv: '%app.oidc_required_groups%'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

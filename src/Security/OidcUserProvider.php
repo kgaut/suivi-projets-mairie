@@ -32,6 +32,7 @@ final class OidcUserProvider implements OidcUserProviderInterface
     public function __construct(
         private readonly UserRepository $users,
         private readonly EntityManagerInterface $entityManager,
+        private readonly OidcAccessGuard $accessGuard,
         private readonly string $adminGroup,
     ) {
     }
@@ -60,6 +61,11 @@ final class OidcUserProvider implements OidcUserProviderInterface
         $user->recordLogin();
 
         $this->entityManager->flush();
+
+        // Filtrage defense in depth (cf. specs §5.3) : l'utilisateur doit
+        // appartenir à au moins un des OIDC_REQUIRED_GROUPS. En cas de rejet,
+        // le user est désactivé localement et une exception interrompt l'auth.
+        $this->accessGuard->ensureUserIsAllowed($user, $groups);
     }
 
     public function loadOidcUser(string $userIdentifier): UserInterface

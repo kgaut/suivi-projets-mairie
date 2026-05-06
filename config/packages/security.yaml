@@ -24,6 +24,10 @@ security:
                 user_identifier_property: sub
                 # Logout SSO Authentik géré par l'issue #27 (pour l'instant logout local seul).
                 enable_end_session_listener: false
+                # Sur échec d'auth (notamment OidcAccessGuard qui rejette via
+                # CustomUserMessageAuthenticationException), on redirige vers
+                # /access-denied au lieu de /login (qui ferait une boucle).
+                failure_path: /access-denied
 
             logout:
                 path: app_logout

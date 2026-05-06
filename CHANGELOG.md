@@ -19,6 +19,13 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Filtrage d'accès `OIDC_REQUIRED_GROUPS`** (defense in depth, cf. specs §5.3) :
+  - `App\Security\OidcAccessGuard` — service qui parse la liste CSV des groupes requis et vérifie l'intersection avec les groupes Authentik de l'utilisateur. Si vide → throw `CustomUserMessageAuthenticationException` qui interrompt l'auth, et marque la projection locale `disabledAt` (préserve l'historique sans permettre une nouvelle session)
+  - Branché dans `OidcUserProvider::ensureUserExists` après création/maj du user
+  - `failure_path: /access-denied` sur le firewall OIDC pour rediriger en cas de rejet
+  - Page `/access-denied` enrichie : icône, message dynamique récupéré via `AuthenticationUtils`, bouton "Se déconnecter"
+  - Si `OIDC_REQUIRED_GROUPS=` (vide) → pas de filtrage côté app (mais Policy Binding Authentik reste en place)
+  - Tests unitaires `OidcAccessGuardTest` (6 tests) couvrant config vide, intersection trouvée, rejet, parsing CSV avec espaces
 - **Authentification OIDC via `drenso/symfony-oidc-bundle`** :
   - Bundle enregistré, `config/packages/drenso_oidc.yaml` qui lit `OIDC_WELL_KNOWN_URL` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` depuis l'env, PKCE activé (`code_challenge_method: S256`), cache jwks et well-known 1 h
   - `security.yaml` réécrit : firewall `main` avec authenticator `oidc:` drenso, provider applicatif `App\Security\OidcUserProvider`, access_control basique (`/login`, `/access-denied` publics, reste `ROLE_USER`)
