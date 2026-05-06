@@ -1,0 +1,60 @@
+{% set current_user = app.user %}
+
+{% if current_user is null %}
+    <a
+        href="{{ path('app_login') }}"
+        class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500"
+    >
+        Se connecter
+    </a>
+{% else %}
+    <div class="relative" data-controller="user-menu">
+        <button
+            type="button"
+            data-user-menu-target="button"
+            data-action="click->user-menu#toggle"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-slate-100"
+        >
+            {{ current_user|avatar(32) }}
+            <span class="hidden text-sm font-medium text-slate-900 sm:inline">{{ current_user.displayName }}</span>
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4 text-slate-500" aria-hidden="true">
+                <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+            </svg>
+        </button>
+
+        <div
+            data-user-menu-target="menu"
+            role="menu"
+            class="absolute right-0 z-50 mt-2 hidden w-56 origin-top-right rounded-md border border-slate-200 bg-white py-1 shadow-lg focus:outline-none"
+        >
+            <a
+                href="{{ path('app_profile_show') }}"
+                role="menuitem"
+                class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+            >
+                Mon profil
+            </a>
+            {% if is_granted('ROLE_ADMIN') %}
+                <a
+                    href="/admin"
+                    role="menuitem"
+                    class="block px-4 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                >
+                    Administration
+                </a>
+            {% endif %}
+            <div class="my-1 border-t border-slate-200"></div>
+            <form action="{{ path('app_logout') }}" method="post" role="none">
+                <button
+                    type="submit"
+                    role="menuitem"
+                    class="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                >
+                    Se déconnecter
+                </button>
+            </form>
+        </div>
+    </div>
+{% endif %}

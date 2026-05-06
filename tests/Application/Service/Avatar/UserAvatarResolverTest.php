@@ -19,7 +19,14 @@ final class UserAvatarResolverTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->resolver = new UserAvatarResolver();
+        $storage = new class implements \App\Application\Storage\AttachmentStorageInterface {
+            public function store(string $path, string $contents): void {}
+            public function delete(string $path): void {}
+            public function exists(string $path): bool { return true; }
+            public function publicUrl(string $path): string { return '/uploads/'.$path; }
+        };
+
+        $this->resolver = new UserAvatarResolver($storage);
     }
 
     public function testAutoFallsBackToInitialsWhenNothingAvailable(): void

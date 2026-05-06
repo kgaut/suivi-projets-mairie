@@ -39,5 +39,15 @@ services:
         arguments:
             $requiredGroupsCsv: '%app.oidc_required_groups%'
 
+    # Stockage des PJ et avatars : implémentation locale en v1, à remplacer
+    # par une GED externe au Lot 4 (cf. specs §3.5 et §6).
+    App\Application\Storage\AttachmentStorageInterface:
+        alias: App\Infrastructure\Storage\LocalAttachmentStorage
+
+    App\Infrastructure\Storage\LocalAttachmentStorage:
+        arguments:
+            $rootDir: '%kernel.project_dir%/var/uploads'
+            $publicPrefix: '/uploads/'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Application\Service\Avatar;
 
+use App\Application\Storage\AttachmentStorageInterface;
 use App\Domain\Enum\AvatarSource;
 use App\Domain\User;
 
@@ -22,13 +23,6 @@ use App\Domain\User;
  */
 final class UserAvatarResolver
 {
-    /**
-     * Préfixe d'URL des fichiers exposés via `AttachmentStorage` (à venir
-     * Lot 4). En attendant, on hardcode `/uploads/` ; les chemins stockés
-     * dans `User::avatarPath` et `User::authentikAvatarPath` sont relatifs.
-     */
-    private const string UPLOADS_PREFIX = '/uploads/';
-
     private const string GRAVATAR_BASE = 'https://gravatar.com/avatar/';
 
     /**
@@ -53,6 +47,11 @@ final class UserAvatarResolver
         '#ec4899', // pink-500
     ];
 
+    public function __construct(
+        private readonly AttachmentStorageInterface $storage,
+    ) {
+    }
+
     public function resolve(User $user, int $size = 64): AvatarRender
     {
         $alt = $user->getDisplayName();
@@ -63,7 +62,7 @@ final class UserAvatarResolver
             ($source === AvatarSource::LOCAL || $source === AvatarSource::AUTO)
             && $user->getAvatarPath() !== null
         ) {
-            return AvatarRender::fromUrl(self::UPLOADS_PREFIX.$user->getAvatarPath(), $alt, $size);
+            return AvatarRender::fromUrl($this->storage->publicUrl($user->getAvatarPath()), $alt, $size);
         }
 
         // 2. Authentik (cache local)
@@ -71,7 +70,7 @@ final class UserAvatarResolver
             ($source === AvatarSource::AUTHENTIK || $source === AvatarSource::AUTO)
             && $user->getAuthentikAvatarPath() !== null
         ) {
-            return AvatarRender::fromUrl(self::UPLOADS_PREFIX.$user->getAuthentikAvatarPath(), $alt, $size);
+            return AvatarRender::fromUrl($this->storage->publicUrl($user->getAuthentikAvatarPath()), $alt, $size);
         }
 
         // 3. Gravatar

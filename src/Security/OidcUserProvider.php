@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Application\Service\Avatar\AuthentikAvatarFetcher;
 use App\Domain\User;
 use App\Infrastructure\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
@@ -33,6 +34,7 @@ final class OidcUserProvider implements OidcUserProviderInterface
         private readonly UserRepository $users,
         private readonly EntityManagerInterface $entityManager,
         private readonly OidcAccessGuard $accessGuard,
+        private readonly AuthentikAvatarFetcher $avatarFetcher,
         private readonly string $adminGroup,
     ) {
     }
@@ -66,6 +68,12 @@ final class OidcUserProvider implements OidcUserProviderInterface
         // appartenir à au moins un des OIDC_REQUIRED_GROUPS. En cas de rejet,
         // le user est désactivé localement et une exception interrompt l'auth.
         $this->accessGuard->ensureUserIsAllowed($user, $groups);
+
+        // Cache l'avatar Authentik (claim `picture`) localement si présent
+        // et si pas trop ancien (TTL 24 h). Échec silencieux : ne casse
+        // jamais le login (fallback Gravatar / initiales par UserAvatarResolver).
+        $picture = $userData->getUserDataString('picture');
+        $this->avatarFetcher->fetchIfNeeded($user, $picture !== '' ? $picture : null);
     }
 
     public function loadOidcUser(string $userIdentifier): UserInterface
