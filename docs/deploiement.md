@@ -4,28 +4,36 @@
 
 ```
                     ┌─────────────────┐
-   Internet ───TLS──┤ Reverse proxy   │
-                    │ (Traefik/Caddy) │
+   Internet ───TLS──┤ Caddy           │      (reverse proxy)
+                    │ (Let's Encrypt) │
                     └────────┬────────┘
-                             │ http
+                             │ http (réseau caddy_net)
                     ┌────────▼─────────┐    ┌──────────┐
-                    │ app (FrankenPHP) ├────┤ postgres │
-                    │ Symfony worker   │    └──────────┘
-                    └────────┬─────────┘    ┌──────────┐
-                             ├──────────────┤ redis    │
+                    │ app (FrankenPHP) ├────┤ postgres │  ⎫
+                    │ Symfony worker   │    └──────────┘  ⎬ réseau
+                    └────────┬─────────┘    ┌──────────┐  ⎪ internal_net
+                             ├──────────────┤ redis    │  ⎭
                     ┌────────▼─────────┐    └──────────┘
                     │ worker (Messenger│
                     │ async)           │
                     └──────────────────┘
 ```
 
-Le reverse proxy (Traefik recommandé si tu en as déjà un, sinon Caddy avec auto-TLS) termine TLS et délègue à FrankenPHP en HTTP. Authentik est sur une autre stack ou le même reverse proxy.
+Choix tranché : **Caddy uniquement** comme reverse proxy (pas de Traefik en parallèle). FrankenPHP fournit Caddy embarqué, et on en utilise une instance dédiée en frontal pour terminer TLS, gérer les certificats Let's Encrypt et router vers les différentes apps (Authentik, Suivi Projets, etc.) — Authentik vit sur la même machine et partage ce Caddy.
+
+**Isolation réseau** : deux réseaux Docker séparés (cf. §3) :
+
+- `caddy_net` (externe) — uniquement caddy ↔ app. Les services internes (db, redis, worker) n'y sont pas exposés.
+- `internal_net` (interne au projet) — app ↔ postgres ↔ redis ↔ worker. Pas accessible depuis le reverse proxy.
+
+Cette séparation évite qu'une compromission du conteneur frontal ouvre un accès direct à la base ou au cache.
 
 ## 2. Prérequis serveur
 
 - Linux récent (Debian 12 / Ubuntu 22.04+)
 - Docker Engine 24+ et Docker Compose v2
-- Reverse proxy avec TLS (Let's Encrypt) — Traefik ou Caddy
+- **Caddy** en frontal (instance partagée avec les autres apps de la mairie comme Authentik), TLS via Let's Encrypt
+- Réseau Docker externe `caddy_net` créé une fois pour toutes (`docker network create caddy_net`)
 - Accès réseau sortant pour `ghcr.io` (pull des images) et l'instance Authentik
 - DNS pointant vers le serveur pour `projets.mairie.example.fr`
 
@@ -50,12 +58,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    networks: [internal, web]
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.spm.rule=Host(`projets.mairie.example.fr`)"
-      - "traefik.http.routers.spm.tls.certresolver=letsencrypt"
-      - "traefik.http.services.spm.loadbalancer.server.port=80"
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal_net, caddy_net]
+    # Routage Caddy : la conf est dans le Caddyfile global (cf. §3.1)
+    # Pas de labels ici — l'app n'a pas conscience du proxy.
 
   worker:
     image: ghcr.io/kgaut/suivi-projets-mairie:${APP_VERSION:-latest}
@@ -68,8 +75,31 @@ services:
     volumes:
       - uploads:/app/var/uploads
       - logs:/app/var/log
-    depends_on: [postgres, redis]
-    networks: [internal]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal_net]
+
+  # Service one-shot : exécute les migrations Doctrine puis sort.
+  # Lancé automatiquement par `up -d` (les autres services attendent qu'il finisse via depends_on).
+  # Permet de bloquer le démarrage de app/worker si une migration échoue, sans embarquer
+  # la logique dans un entrypoint applicatif (cf. §6.1 pour la justification du choix).
+  migrate:
+    image: ghcr.io/kgaut/suivi-projets-mairie:${APP_VERSION:-latest}
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+    command: ["php", "bin/console", "doctrine:migrations:migrate", "--no-interaction", "--allow-no-migration"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal_net]
+    restart: "no"
 
   postgres:
     image: postgres:16-alpine
@@ -84,7 +114,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       retries: 10
-    networks: [internal]
+    networks: [internal_net]
 
   redis:
     image: redis:7-alpine
@@ -96,7 +126,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
-    networks: [internal]
+    networks: [internal_net]
 
 volumes:
   pgdata:
@@ -105,10 +135,31 @@ volumes:
   logs:
 
 networks:
-  internal:
-  web:
-    external: true   # réseau partagé avec Traefik
+  # Réseau interne au projet : app, worker, postgres, redis, migrate.
+  # Pas exposé à l'extérieur, pas accessible depuis le reverse proxy.
+  internal_net:
+    driver: bridge
+  # Réseau partagé avec le Caddy frontal et les autres apps de la mairie.
+  # Seul le service `app` y est attaché ; postgres/redis ne sont JAMAIS dessus.
+  caddy_net:
+    external: true
 ```
+
+### 3.1 Configuration Caddy (frontal)
+
+Le Caddy frontal (instance partagée avec les autres apps) ajoute un bloc dans son `Caddyfile` :
+
+```caddy
+projets.mairie.example.fr {
+    encode zstd gzip
+    reverse_proxy app:80
+    log {
+        output file /var/log/caddy/spm.log
+    }
+}
+```
+
+`app` est résolu via le réseau Docker `caddy_net` (le service `app` du compose y est attaché).
 
 ## 4. Variables d'environnement (`.env`)
 
@@ -143,6 +194,9 @@ TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 # Sur le serveur
 mkdir -p /opt/suivi-projets-mairie && cd /opt/suivi-projets-mairie
 
+# Crée le réseau Docker partagé avec Caddy (une seule fois)
+docker network create caddy_net 2>/dev/null || true
+
 # Récupère les fichiers de stack
 curl -O https://raw.githubusercontent.com/kgaut/suivi-projets-mairie/main/docker-compose.prod.yml
 
@@ -150,36 +204,58 @@ curl -O https://raw.githubusercontent.com/kgaut/suivi-projets-mairie/main/docker
 cp .env.example .env
 $EDITOR .env
 
-# Démarre la stack
+# Démarre la stack — le service `migrate` s'exécute automatiquement avant app/worker
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml up -d
-
-# Lance les migrations
-docker compose -f docker-compose.prod.yml exec app php bin/console doctrine:migrations:migrate --no-interaction
 ```
 
 ## 6. Mise à jour
 
 ```bash
-# 1. Note la version actuelle
+# 1. Backup base avant migration (cf. §7)
+/etc/cron.daily/spm-backup   # ou exécution manuelle
+
+# 2. Note la version actuelle
 docker compose -f docker-compose.prod.yml ps app
 
-# 2. Modifie APP_VERSION dans .env
+# 3. Modifie APP_VERSION dans .env
 $EDITOR .env
 
-# 3. Pull et redémarre (rolling : worker puis app)
+# 4. Pull les nouvelles images
 docker compose -f docker-compose.prod.yml pull
+
+# 5. Migrations (one-shot, bloque la suite si une migration échoue)
+docker compose -f docker-compose.prod.yml run --rm migrate
+
+# 6. Redémarre app et worker (rolling : worker en premier puis app)
 docker compose -f docker-compose.prod.yml up -d --no-deps worker
 docker compose -f docker-compose.prod.yml up -d --no-deps app
 
-# 4. Migrations
-docker compose -f docker-compose.prod.yml exec app php bin/console doctrine:migrations:migrate --no-interaction
-
-# 5. Purge de cache Symfony (déjà faite par le entrypoint, mais pour info)
+# 7. (optionnel) Purge de cache Symfony — déjà faite par l'entrypoint applicatif
 docker compose -f docker-compose.prod.yml exec app php bin/console cache:clear
 ```
 
 > ⚠️ Toujours faire un `pg_dump` avant un déploiement comportant des migrations (cf. section 7).
+
+### 6.1 Pourquoi un service `migrate` one-shot et pas un entrypoint applicatif ?
+
+Trois options classiques :
+
+| Option | Description | Choix |
+|---|---|---|
+| **A. Entrypoint applicatif** | L'image app exécute `doctrine:migrations:migrate` au démarrage avant de servir le trafic | ❌ |
+| **B. Commande manuelle après déploiement** | L'opérateur lance la commande à la main une fois la stack démarrée | ❌ |
+| **C. Service `migrate` one-shot dans le compose** | Container dédié qui run-once et bloque les autres services via `depends_on` + `service_completed_successfully` | ✅ **Retenu** |
+
+L'option C combine les avantages des deux autres :
+
+- **Automatique** comme A : un `docker compose up -d` suffit, pas d'étape manuelle à oublier.
+- **Explicite** comme B : la migration est un service nommé, ses logs sont accessibles via `docker compose logs migrate`, son exit code est observable.
+- **Bloquant en cas d'échec** : si la migration échoue, app et worker ne démarrent pas (pas de trafic vers une base incohérente).
+- **Pas de race condition** : si demain on passe à plusieurs replicas de l'app, seul le service `migrate` exécute la commande, une seule fois.
+- **Pas de dépendance dans l'image app** : l'entrypoint reste minimal (juste FrankenPHP), la migration est orchestrée au niveau compose, ce qui correspond mieux à la séparation des responsabilités.
+
+Pour un déploiement séparé (CI/CD distant qui pousse une image et veut migrer manuellement), `docker compose run --rm migrate` reste la commande canonique.
 
 ### Rollback
 

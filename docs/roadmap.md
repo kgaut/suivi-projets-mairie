@@ -27,6 +27,10 @@ Squelette technique opérationnel + section administration de base + infrastruct
 - [ ] CI GitHub Actions (lint + tests + phpstan + composer audit + deptrac)
 - [ ] CI GitLab miroir
 - [ ] Build + push image GHCR sur tag
+- [ ] Service `migrate` one-shot dans `docker-compose.prod.yml` (cf. `docs/deploiement.md` §6.1)
+- [ ] Réseaux Docker séparés `internal_net` (services) et `caddy_net` (proxy externe)
+- [ ] **GrumPHP** installé et hooks pre-commit/pre-push configurés (cf. `docs/qualite.md` §6)
+- [ ] **Sentry** branché (`sentry/sentry-symfony`, DSN via env, release = `APP_VERSION`, cf. `docs/qualite.md` §10)
 - [ ] Doc d'install à jour (`docs/local-dev.md`, `docs/deploiement.md`, `docs/authentik.md`)
 
 **Authentification**
