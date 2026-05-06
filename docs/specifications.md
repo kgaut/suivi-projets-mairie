@@ -136,7 +136,9 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 
 ### 3.2 Tâche
 
-Une **tâche** est une unité de travail rattachée à un projet. Elle représente une action concrète à mener, peut être assignée à un agent, et peut découler d'une demande externe (cf. Demandeur §3.10).
+Une **tâche** est une unité de travail. Elle est généralement rattachée à un projet, mais peut aussi être **autonome** (sans projet parent) — typiquement pour des signalements ponctuels qui ne s'inscrivent pas dans une initiative plus large (ex. un signalement citoyen "nid de poule devant chez moi" remonté via l'API du Lot 6, ou une demande isolée traitée à la volée par un agent).
+
+Une tâche peut être assignée à un agent, et peut découler d'une demande externe (cf. Demandeur §3.10).
 
 #### Attributs
 
@@ -148,10 +150,12 @@ Une **tâche** est une unité de travail rattachée à un projet. Elle représen
 | `description` | text (markdown) | ✗ | Détail de la tâche |
 | `status` | enum | ✓ | Voir cycle de vie ci-dessous |
 | `priority` | enum | ✓ | `basse` / `normale` (défaut) / `haute` / `critique` |
-| `project` | Project | ✓ | Projet parent (cf. question ouverte #1) |
+| `project` | Project | ✗ | Projet parent (optionnel — voir §"Tâches autonomes" ci-dessous) |
+| `visibility` | enum | ✓ (uniquement si `project=null`) | `public_interne` ou `restricted` (sinon hérité du projet parent) |
+| `restrictedToGroups` | string[] | ✗ | Groupes Authentik autorisés si `visibility=restricted` (et tâche autonome) |
 | `assignee` | User | ✗ | Agent assigné |
 | `requester` | Requester | ✗ | Demandeur externe (cf. §3.10) |
-| `workingGroups` | WorkingGroup[] | ✗ | Hérités du projet par défaut au moment de la création, surchargeables (cf. §3.11) |
+| `workingGroups` | WorkingGroup[] | ✗ | Hérités du projet par défaut **si** projet présent ; sinon saisis manuellement (cf. §3.11) |
 | `labels` | string[] | ✗ | Étiquettes libres (peuvent être héritées du projet) |
 | `dueDate` | date | ✗ | Échéance |
 | `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin effective |
@@ -159,10 +163,25 @@ Une **tâche** est une unité de travail rattachée à un projet. Elle représen
 | `blockedReason` | text | ✗ | Motif obligatoire si `status=bloquee` |
 | `lastStatusChangeAt` | datetime | ✓ | Pour les indicateurs de stagnation |
 | `publicLabel` | enum | ✗ | Mappage côté demandeur (cf. §3.10 : "Reçu" / "En traitement" / "Traité") — calculé automatiquement depuis `status` mais surchargeable au cas par cas |
+| `source` | enum | ✓ | `manual` (création par un agent) / `citizen_api` (créé par l'API du Lot 6) / `import` — utile pour les statistiques et l'audit |
 | `createdAt` | datetime | ✓ | |
-| `createdBy` | User | ✓ | |
+| `createdBy` | User | ✗ (nullable si `source=citizen_api`) | Créateur agent ; vide si la tâche provient de l'API citoyenne |
 | `updatedAt` | datetime | ✓ | |
 | `updatedBy` | User | ✓ | |
+
+#### Tâches autonomes (sans projet parent)
+
+- **Cas d'usage** :
+  - Signalement citoyen reçu via webservice (Lot 6) → tâche créée automatiquement, sans projet, avec `source=citizen_api`.
+  - Demande isolée d'un habitant traitée par un agent qui ne veut pas créer un projet pour si peu.
+  - Tâche personnelle d'un agent (suivi à faire) qui ne s'inscrit pas dans une initiative officielle.
+- **Règles spécifiques** :
+  - `visibility` est saisie directement sur la tâche (par défaut `public_interne`).
+  - `workingGroups` est saisi manuellement (pas d'héritage possible).
+  - Pas de cascade d'annulation (puisqu'il n'y a pas de projet parent).
+  - Pas de contrainte "projet en pause" sur les transitions de statut.
+- **Vue dédiée** : `/taches/autonomes` (filtre `project=null` sur la liste générale), accessible aux rôles `ROLE_AGENT` et au-dessus.
+- **Promotion vers un projet** : un agent peut, plus tard, rattacher une tâche autonome à un projet existant (ou en créer un et y rattacher la tâche). L'opération est tracée dans l'audit (`task.attached_to_project`).
 
 #### Cycle de vie
 
@@ -223,28 +242,33 @@ Une **tâche** est une unité de travail rattachée à un projet. Elle représen
 
 #### Contraintes de cycle
 
-- Une tâche ne peut pas changer de statut si son projet est en `en_pause`, `termine` ou `annule`.
-- Si le projet bascule en `annule`, toutes ses tâches non terminales basculent automatiquement en `annulee` (avec un événement audit `task.cascade_cancelled`).
-- Une tâche en `bloquee` depuis plus de N jours apparaît dans le dashboard "alertes" (paramètre, défaut 14 jours).
+- **Si `project != null`** : une tâche ne peut pas changer de statut si son projet est en `en_pause`, `termine` ou `annule`. Si le projet bascule en `annule`, toutes ses tâches non terminales basculent automatiquement en `annulee` (avec un événement audit `task.cascade_cancelled`).
+- **Si `project = null`** (tâche autonome) : aucune contrainte externe, le cycle de vie est libre.
+- Une tâche en `bloquee` depuis plus de N jours apparaît dans le dashboard "alertes" (paramètre, défaut 14 jours), qu'elle ait un projet ou non.
 
 #### Droits par rôle
 
 | Action | `ROLE_LECTEUR` | `ROLE_AGENT` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
 |---|---|---|---|---|
-| Voir une tâche du projet visible | ✓ | ✓ | ✓ | ✓ |
+| Voir une tâche visible (incl. autonome) | ✓ | ✓ | ✓ | ✓ |
 | Créer une tâche dans un projet visible | ✗ | ✓ | ✓ | ✓ |
+| Créer une tâche autonome (sans projet) | ✗ | ✓ | ✓ | ✓ |
 | Modifier une tâche dont je suis assignee | n/a | ✓ | ✓ | ✓ |
+| Modifier une tâche dont je suis créateur (autonome) | n/a | ✓ | ✓ | ✓ |
 | Modifier une tâche d'un projet dont je suis owner/coOwner | n/a | ✓ | ✓ | ✓ |
 | Modifier toute tâche | ✗ | ✗ | ✗ | ✓ |
 | Réassigner | ✗ | ✓ (mes tâches) | ✓ (toutes les tâches du projet) | ✓ |
-| Annuler | ✗ | ✗ | ✓ | ✓ |
+| Annuler une tâche autonome | ✗ | ✓ (créateur ou assignee) | ✓ | ✓ |
+| Annuler une tâche d'un projet | ✗ | ✗ | ✓ (owner/coOwner) | ✓ |
+| Rattacher une tâche autonome à un projet | ✗ | ✗ | ✓ (du projet cible) | ✓ |
 
 #### Actions
 
-- Créer, éditer, supprimer (admin uniquement, déclenchée → bascule plutôt en `annulee`)
+- Créer (avec ou sans projet), éditer, supprimer (admin uniquement, déclenchée → bascule plutôt en `annulee`)
 - Changer le statut, l'assigné, la priorité
 - Associer / dissocier un demandeur
 - Surcharger les groupes de travail (par défaut hérités du projet)
+- **Rattacher à un projet** (pour les tâches autonomes) ou **détacher d'un projet** (rendre autonome) — déclenche un événement audit
 - Commenter (Lot 4)
 - Joindre des fichiers (Lot 4)
 - Suivre / ne plus suivre (Lot 4)
@@ -347,7 +371,7 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 
 | Slug | Quand | Payload |
 |---|---|---|
-| `task.created` | Création | `{ title, projectId, requesterId? }` |
+| `task.created` | Création | `{ title, projectId?, requesterId?, source }` |
 | `task.updated` | Édition | `{ changes: {...} }` |
 | `task.status_changed` | Transition de statut | `{ from, to, reason? }` |
 | `task.blocked` | Passage en `bloquee` | `{ reason }` |
@@ -357,6 +381,8 @@ Conséquence : on ne revient **pas** sur le code des features pour brancher l'au
 | `task.requester_linked` | Demandeur associé à la tâche | `{ requesterId }` |
 | `task.requester_unlinked` | Demandeur dissocié | `{ requesterId }` |
 | `task.working_groups_changed` | Modification des groupes de travail associés | `{ added: [...], removed: [...] }` |
+| `task.attached_to_project` | Tâche autonome rattachée à un projet | `{ projectId }` |
+| `task.detached_from_project` | Tâche rattachée à un projet rendue autonome | `{ previousProjectId }` |
 | `task.cascade_cancelled` | Annulée automatiquement par cascade projet | `{ projectId }` |
 | `task.deleted` | Suppression (si autorisée) | `{}` |
 
@@ -691,7 +717,7 @@ Cette séparation `Controller → Application → Domain ← Infrastructure` per
 
 ## 8. Questions ouvertes (à trancher avec toi)
 
-1. Tâches autorisées sans projet parent ? (recommandation : non)
+1. ~~Tâches autorisées sans projet parent ?~~ **Tranché** : oui — les tâches autonomes sont autorisées (cf. §3.2 "Tâches autonomes").
 2. Framework CSS : Tailwind ou Bootstrap ? (recommandation : Tailwind)
 3. Limites pièces jointes : 10 Mo / 5 fichiers ?
 4. Durée de rétention des logs / audit ?

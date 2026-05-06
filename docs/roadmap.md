@@ -95,16 +95,19 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 
 **Tâches**
 
-- [ ] Entité `Task` complète selon §3.2 (reference, title, description, status, priority, project, assignee, requester, workingGroups hérités, labels, dueDate, estimatedEffort, blockedReason, publicLabel, lastStatusChangeAt)
+- [ ] Entité `Task` complète selon §3.2 (reference, title, description, status, priority, **project (nullable)**, **visibility + restrictedToGroups (si autonome)**, assignee, requester, workingGroups hérités OU saisis manuellement, labels, dueDate, estimatedEffort, blockedReason, publicLabel, **source**, lastStatusChangeAt)
 - [ ] Workflow Symfony pour le cycle de vie (6 statuts, transitions et garde-fous définis en §3.2)
 - [ ] CRUD Task (liste filtrée par projet, fiche, créer, éditer)
+- [ ] **Création de tâche autonome** (sans projet) : formulaire dédié avec champ `visibility`, saisie manuelle des `workingGroups`, source = `manual`
+- [ ] **Vue "Tâches autonomes"** `/taches/autonomes` (filtre `project=null`)
+- [ ] **Rattachement à un projet** (action sur tâche autonome) et **détachement** (rendre une tâche autonome) avec audit
 - [ ] Champ "motif" obligatoire pour les transitions vers `bloquee` et `annulee`
-- [ ] Cascade : annulation automatique des tâches d'un projet `annule`
-- [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule`
+- [ ] Cascade : annulation automatique des tâches d'un projet `annule` (uniquement si la tâche a un projet)
+- [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule` (uniquement si la tâche a un projet)
 - [ ] Génération de la référence `T-YYYY-NNNN`
 - [ ] Vue "Mes tâches" (assigné = moi) avec onglets par statut
-- [ ] Voters Task : assignée à moi / projet dont je suis owner / admin
-- [ ] Surcharge des groupes de travail au niveau de la tâche (par défaut hérités du projet)
+- [ ] Voters Task : assignée à moi / créateur (autonome) / projet dont je suis owner / admin
+- [ ] Surcharge des groupes de travail au niveau de la tâche (par défaut hérités du projet quand projet présent)
 
 **Demandeurs (Requester)**
 
@@ -119,8 +122,8 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 
 **Événements et tests**
 
-- [ ] **Émission des événements applicatifs** : `working_group.*`, `project.*`, `task.*` (incluant `task.requester_linked/unlinked`, `task.cascade_cancelled`, `task.working_groups_changed`), `requester.created/updated/anonymized` (cf. `docs/specifications.md` §3.9)
-- [ ] Tests fonctionnels du parcours complet (création groupe de travail → projet → tâche → association demandeur, cascade d'annulation, transitions bloquées par projet en pause)
+- [ ] **Émission des événements applicatifs** : `working_group.*`, `project.*`, `task.*` (incluant `task.requester_linked/unlinked`, `task.cascade_cancelled`, `task.working_groups_changed`, `task.attached_to_project`, `task.detached_from_project`), `requester.created/updated/anonymized` (cf. `docs/specifications.md` §3.9)
+- [ ] Tests fonctionnels du parcours complet (création groupe de travail → projet → tâche → association demandeur, cascade d'annulation, transitions bloquées par projet en pause, **création d'une tâche autonome puis rattachement à un projet**)
 - [ ] Vues mobile testées (liste projets en cartes, formulaires adaptés, badges groupe de travail)
 
 ### Lot 2 — Audit log et journalisation · `v0.3.0` · 📅 prévu
@@ -214,10 +217,11 @@ Ouverture maîtrisée vers l'extérieur : portail de suivi pour les demandeurs (
 
 - [ ] Mise en place d'API Platform sur les ressources publiques (Project en lecture)
 - [ ] Authentification API par token (clés générées par les admins)
-- [ ] Endpoint `POST /api/signalements` qui crée un Requester (ou réutilise par dédup e-mail) + une Task dans un projet "Signalements citoyens"
+- [ ] Endpoint `POST /api/signalements` qui crée un Requester (ou réutilise par dédup e-mail) + une **tâche autonome** (sans projet, `source=citizen_api`)
 - [ ] Documentation OpenAPI
 - [ ] Tests d'intégration API
 - [ ] Rate limiting (Symfony RateLimiter + Redis)
+- [ ] Vue dédiée "Signalements citoyens à traiter" : filtre tâches autonomes avec `source=citizen_api` et statut `a_faire`/`en_cours`
 
 **Événements**
 
