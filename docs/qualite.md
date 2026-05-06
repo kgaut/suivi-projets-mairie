@@ -183,14 +183,17 @@ On branche **Sentry** dès le Lot 0 pour le suivi d'erreurs en prod. Compte Sent
 ### 10.1 Intégration Symfony
 
 - Bundle officiel : [`sentry/sentry-symfony`](https://github.com/getsentry/sentry-symfony)
-- Variable d'environnement : `SENTRY_DSN` (vide en dev, renseignée en staging/prod)
+- Variables d'environnement :
+  - `SENTRY_DSN` — vide en dev, renseignée en staging/prod
+  - `SENTRY_ENV` — environnement courant (`dev` / `staging` / `production`). Distinct de `APP_ENV` pour pouvoir différencier plusieurs déploiements en mode `prod` côté Sentry
+  - `APP_VERSION` — release Sentry (cf. ci-dessous)
 - Configuration dans `config/packages/sentry.yaml` :
 
 ```yaml
 sentry:
   dsn: '%env(SENTRY_DSN)%'
   options:
-    environment: '%kernel.environment%'
+    environment: '%env(SENTRY_ENV)%'
     release: '%env(APP_VERSION)%'         # mappe les erreurs au tag git
     send_default_pii: false                # RGPD : pas de cookies/IP par défaut
     traces_sample_rate: 0.1                # 10 % des transactions tracées (APM léger)
