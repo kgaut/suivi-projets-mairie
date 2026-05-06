@@ -1,0 +1,87 @@
+# Squelette de stack docker compose pour le développement local.
+# Sera finalisé au Lot 0 (le Dockerfile dev n'existe pas encore).
+# Renommer en `docker-compose.dev.yml` une fois le squelette Symfony en place.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: dev
+      args:
+        XDEBUG_VERSION: "3.3"
+    restart: unless-stopped
+    env_file: .env.local
+    environment:
+      APP_ENV: dev
+      APP_DEBUG: 1
+      # FrankenPHP / Caddy : nom de domaine local + TLS automatique (CA Caddy interne).
+      # Voir docs/local-dev.md §3.1 pour installer la CA dans le trust store du host.
+      SERVER_NAME: ${DEV_SERVER_NAME:-spm.localhost}
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+      XDEBUG_CLIENT_HOST: ${XDEBUG_CLIENT_HOST:-host.docker.internal}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - .:/app:cached
+      # Volume nommé pour vendor pour ne pas écraser ce qui est dans l'image
+      - vendor:/app/vendor
+      # Persiste la CA Caddy locale et les certificats générés entre redémarrages
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      # Permet d'utiliser host.docker.internal sous Linux
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-spm}
+      POSTGRES_USER: ${POSTGRES_USER:-spm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-spm}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"  # UI
+      - "1025:1025"  # SMTP
+    environment:
+      MP_MAX_MESSAGES: 5000
+
+volumes:
+  pgdata:
+  redisdata:
+  vendor:
+  caddy_data:
+  caddy_config:
