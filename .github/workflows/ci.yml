@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Annule les exécutions précédentes sur la même branche pour économiser
+# les minutes runner (utile sur les commits successifs en draft).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PHP_VERSION: "8.4"
+  COMPOSER_FLAGS: "--no-progress --prefer-dist --no-interaction"
+
+jobs:
+  lint:
+    name: Lint + analyse statique
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: intl, opcache, apcu, gd, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install ${{ env.COMPOSER_FLAGS }}
+
+      - name: PHP-CS-Fixer (dry-run)
+        run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+      - name: Twig CS Fixer
+        run: vendor/bin/twig-cs-fixer lint templates
+
+      - name: PHPStan
+        run: |
+          # Compile le container pour les checks PHPStan-Symfony
+          php bin/console cache:warmup --env=dev || true
+          vendor/bin/phpstan analyse --memory-limit=-1 --no-progress
+
+      - name: Symfony lint:yaml
+        run: php bin/console lint:yaml config translations --parse-tags
+
+      - name: Symfony lint:twig
+        run: php bin/console lint:twig templates
+
+      - name: Symfony lint:container
+        run: php bin/console lint:container
+
+      - name: Deptrac (architecture)
+        run: vendor/bin/deptrac analyse --no-progress --report-uncovered
+
+  test:
+    name: Tests (PHPUnit)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: spm
+          POSTGRES_PASSWORD: spm
+          POSTGRES_DB: spm_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U spm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: test
+      DATABASE_URL: "postgresql://spm:spm@127.0.0.1:5432/spm_test?serverVersion=16&charset=utf8"
+      REDIS_URL: "redis://127.0.0.1:6379"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: intl, opcache, apcu, gd, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install ${{ env.COMPOSER_FLAGS }}
+
+      - name: Doctrine schema validate
+        run: |
+          php bin/console doctrine:database:create --if-not-exists --env=test
+          php bin/console doctrine:migrations:migrate --no-interaction --env=test
+          php bin/console doctrine:schema:validate --skip-sync --env=test
+
+      - name: PHPUnit
+        run: vendor/bin/phpunit --testdox
+
+  audit:
+    name: Audit + Rector (dry-run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: intl, opcache, apcu, gd, pdo_pgsql, redis, zip
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.composer/cache
+            vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install ${{ env.COMPOSER_FLAGS }}
+
+      - name: Composer audit (vulnérabilités)
+        run: composer audit --no-dev=false
+
+      - name: Rector (dry-run)
+        run: vendor/bin/rector process --dry-run --no-progress-bar
