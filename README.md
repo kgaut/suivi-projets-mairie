@@ -20,6 +20,7 @@ Outil interne de gestion de projet pour une mairie : suivi des projets numériqu
 | Sujet | Fichier |
 |---|---|
 | Spécifications fonctionnelles et techniques | [`docs/specifications.md`](docs/specifications.md) |
+| Modèle de données (entités, attributs, types) | [`docs/modele-de-donnees.md`](docs/modele-de-donnees.md) |
 | Roadmap et lots de livraison | [`docs/roadmap.md`](docs/roadmap.md) |
 | Configuration Authentik (côté IDP + côté app) | [`docs/authentik.md`](docs/authentik.md) |
 | Déploiement en production (docker compose) | [`docs/deploiement.md`](docs/deploiement.md) |

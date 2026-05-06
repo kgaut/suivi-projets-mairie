@@ -13,8 +13,10 @@ une fois les specs stabilisées.
 Lire dans cet ordre :
 
 1. `docs/specifications.md` — modèle métier, specs techniques, **décisions §8**
-2. `docs/roadmap.md` — lot en cours, périmètre des lots à venir
-3. `docs/workflow.md` — process issue → branche → PR → tag
+2. `docs/modele-de-donnees.md` — entités Doctrine, attributs, types,
+   relations (vue de référence pour les migrations)
+3. `docs/roadmap.md` — lot en cours, périmètre des lots à venir
+4. `docs/workflow.md` — process issue → branche → PR → tag
 
 Pour les sujets transverses : `docs/authentik.md` (OIDC), `docs/deploiement.md`
 (prod), `docs/local-dev.md` (dev), `docs/qualite.md` (outils qualité).

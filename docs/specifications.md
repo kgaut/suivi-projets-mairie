@@ -28,6 +28,8 @@ Les rôles sont **dérivés des groupes Authentik**. Aucun rôle n'est géré da
 
 ## 3. Concepts métier (modèle de domaine)
 
+> 📋 **Vue de référence pour l'implémentation** : la liste exhaustive des entités Doctrine (attributs, types PHP, types SQL, relations, index) est centralisée dans [`docs/modele-de-donnees.md`](modele-de-donnees.md). Cette section reste la source de vérité **sémantique** ; le fichier de modèle de données reflète la structure technique.
+
 ### 3.1 Projet
 
 Un **projet** représente une initiative de la mairie (ex. "Refonte du site web", "Fibre dans les écoles", "Aménagement parc municipal"). C'est l'unité de regroupement des tâches.
