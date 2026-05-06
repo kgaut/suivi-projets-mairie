@@ -40,6 +40,14 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - `assets/controllers/hello_controller.js` : démo Stimulus côté client (toggle de message)
 - Page d'accueil refondue avec Tailwind + démos Stimulus et Live Component côté à côté
 
+### Changed
+
+- `.editorconfig` enrichi : règles dédiées YAML/JSON/Twig/JS/CSS (2 espaces), Markdown (2 espaces, trailing whitespace conservé), Makefile (tabulations exigées par make)
+
+### Added
+
+- `.gitattributes` à la racine : normalisation eol=lf, déclaration des binaires (png, jpg, fonts, archives, etc.), `export-ignore` sur les fichiers de tooling/doc pour alléger les archives `git archive`, hints `linguist-*` pour les statistiques GitHub
+
 ## [0.0.1] - 2026-05-06
 
 Cadrage initial du projet — pas de code applicatif, uniquement les documents de référence.

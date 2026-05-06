@@ -1,0 +1,75 @@
+# Normalisation des fins de ligne : tout est traité en LF côté repo,
+# git convertit automatiquement à l'extraction si nécessaire (CRLF sur
+# Windows si core.autocrlf=true).
+* text=auto eol=lf
+
+# Fichiers explicitement texte (au cas où l'auto-détection se trompe)
+*.php       text eol=lf
+*.twig      text eol=lf
+*.html      text eol=lf
+*.css       text eol=lf
+*.scss      text eol=lf
+*.js        text eol=lf
+*.json      text eol=lf
+*.md        text eol=lf
+*.neon      text eol=lf
+*.xml       text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.sh        text eol=lf
+Dockerfile  text eol=lf
+Makefile    text eol=lf
+
+# Binaires (pas de diff lisible, pas de conversion eol)
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.svg       text   # SVG = XML, restons en text pour le diff
+*.webp      binary
+*.heic      binary
+*.pdf       binary
+*.zip       binary
+*.7z        binary
+*.gz        binary
+*.tar       binary
+*.bz2       binary
+*.eot       binary
+*.ttf       binary
+*.woff      binary
+*.woff2     binary
+*.otf       binary
+*.mp3       binary
+*.mp4       binary
+*.webm      binary
+*.ogg       binary
+
+# export-ignore : exclus des archives `git archive` (release tarballs)
+# Garde les archives release légères, sans tooling ni doc dev.
+.dockerignore       export-ignore
+.editorconfig       export-ignore
+.env.dev            export-ignore
+.gitattributes      export-ignore
+.github/            export-ignore
+.gitignore          export-ignore
+.gitlab-ci.yml      export-ignore
+.php-cs-fixer.cache export-ignore
+.php-cs-fixer.dist.php export-ignore
+.twig-cs-fixer.dist.php export-ignore
+CHANGELOG.md        export-ignore
+CLAUDE.md           export-ignore
+Makefile            export-ignore
+deptrac.yaml        export-ignore
+docker-compose.dev.yml export-ignore
+docs/               export-ignore
+grumphp.yml         export-ignore
+phpstan.neon.dist   export-ignore
+phpunit.dist.xml    export-ignore
+rector.php          export-ignore
+tests/              export-ignore
+
+# Linguist (statistiques GitHub) — exclure du décompte de langages
+docs/*              linguist-documentation
+*.lock              linguist-generated
+config/reference.php linguist-generated
