@@ -19,6 +19,12 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Service `UserAvatarResolver`** (`App\Application\Service\Avatar`) qui implémente la cascade définie en specs §3.8 : upload local → cache Authentik → Gravatar → initiales SVG. Préférence utilisateur `avatarSource` peut forcer une source. Fallback automatique sur les initiales si la source forcée n'est pas dispo (jamais d'avatar cassé)
+- **DTO `AvatarRender`** : URL distante OU SVG inline + alt + size, consommé par le filtre Twig
+- **Filtre Twig `user|avatar(size=64, class='')`** (`App\Twig\AvatarExtension`) qui rend `<img>` (URL) ou `<span><svg>...</svg></span>` (initiales) avec classes Tailwind par défaut (`rounded-full object-cover`), `loading="lazy"`, `decoding="async"` et bonnes pratiques a11y (`alt`, `role="img"`, `aria-label`)
+- Génération Gravatar : hash SHA-256 (nouvelle API, MD5 dépréciée), `?d=identicon` pour avoir toujours une image (pattern unique par e-mail) plutôt qu'un 404 cassé
+- Génération initiales SVG : 2 lettres max du `displayName`, fond couleur stable dérivé de `authentikId` (`crc32` modulo palette de 12 couleurs Tailwind)
+- Tests unitaires `UserAvatarResolverTest` (11 tests, couvrant chaque branche de la cascade, déterminisme du hash Gravatar, déterminisme de la couleur initiale)
 - **Entité `App\Domain\User`** (projection locale d'Authentik) — PK Uuid v7, `authentikId` unique, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, attributs avatar (`avatarPath`, `authentikAvatarSourceUrl`, `authentikAvatarPath`, `authentikAvatarFetchedAt`), `avatarSource`, `gravatarAllowed`, `createdAt`, `updatedAt`. Implémente `Symfony\Component\Security\Core\User\UserInterface` avec `getUserIdentifier()` retournant `authentikId` (clé stable)
 - **Enum `App\Domain\Enum\AvatarSource`** : `AUTO` / `LOCAL` / `AUTHENTIK` / `GRAVATAR` / `INITIALS`
 - **`App\Infrastructure\Repository\UserRepository`** avec `findOneByAuthentikId()` pour la réconciliation au login
