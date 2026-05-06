@@ -238,7 +238,7 @@ Spec : `docs/specifications.md` §3.8.
 | `username` | `string` | `varchar(128)` | ✗ | |
 | `email` | `string` | `varchar(255)` | ✗ | |
 | `displayName` | `string` | `varchar(255)` | ✗ | |
-| `roles` | `array` | `text[]` | ✗ | Dérivés des groupes au login |
+| `roles` | `array` | `text[]` | ✗ | Au login on stocke `[ROLE_USER]` plus `[ROLE_ADMIN]` si l'utilisateur est dans `OIDC_ADMIN_GROUP`. Les autres rôles (`ROLE_CHEF_PROJET`, `ROLE_ACTEUR`, `ROLE_LECTEUR`) sont calculés dynamiquement par les voters et **ne sont pas stockés** ici (cf. specs §2) |
 | `groupsSnapshot` | `array` | `text[]` | ✗ | Groupes Authentik au dernier login |
 | `lastLoginAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | |
 | `disabledAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | |
@@ -308,15 +308,30 @@ Spec : `docs/specifications.md` §3.11.
 | `description` | `?string` | `text` | ✓ | |
 | `color` | `?string` | `varchar(7)` | ✓ | Hex `#RRGGBB` |
 | `icon` | `?string` | `varchar(64)` | ✓ | Emoji ou nom d'icône |
-| `authentikGroup` | `?string` | `varchar(255)` | ✓ | Mapping vers le groupe Authentik (1-1 optionnel) |
+| `authentikGroup` | `AuthentikGroup` | FK `uuid` | ✗ | M2O vers `AuthentikGroup` (cf. §3.12) — un WG est obligatoirement adossé à un groupe Authentik visible |
 | `position` | `int` | `integer` | ✗ | Ordre d'affichage |
 | `archivedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
 | `createdBy` / `updatedBy` | `User` | FK `uuid` | ✗ | |
 
-**Index** : `slug` (unique), `authentikGroup`.
+**Index** : `slug` (unique), `authentik_group_id`.
 
-### 3.12 ExternalLink — `external_links`
+### 3.12 AuthentikGroup — `authentik_groups`
+
+Cache local des groupes Authentik récupérés via l'API admin. Spec : `docs/specifications.md` §3.11 (sous-section "Découverte des groupes Authentik côté admin").
+
+| Champ | Type PHP | Type SQL | N | Notes |
+|---|---|---|---|---|
+| `id` | `Uuid` | `uuid` | ✗ | PK locale |
+| `authentikId` | `string` | `varchar(64)` | ✗ | Unique, UUID/PK côté Authentik (clé de réconciliation) |
+| `name` | `string` | `varchar(255)` | ✗ | Nom courant côté Authentik (peut évoluer) |
+| `visible` | `bool` | `boolean` | ✗ | Toggle "Visible dans l'app" — défaut `false` |
+| `lastSyncedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
+| `vanishedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | Si lors d'une synchro le groupe a disparu côté Authentik |
+
+**Index** : `authentikId` (unique), `(visible, vanishedAt)` pour les listes admin.
+
+### 3.13 ExternalLink — `external_links`
 
 Spec : `docs/specifications.md` §3.12.
 
@@ -331,7 +346,7 @@ Spec : `docs/specifications.md` §3.12.
 | `enabled` | `bool` | `boolean` | ✗ | |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
 
-### 3.13 Following (Lot 4) — `followings`
+### 3.14 Following (Lot 4) — `followings`
 
 Pour le système "suivre un projet/tâche".
 
@@ -345,7 +360,7 @@ Pour le système "suivre un projet/tâche".
 
 **Contrainte unique** : `(user_id, subjectType, subjectId)`.
 
-### 3.14 CrossReference (Lot 4) — `cross_references`
+### 3.15 CrossReference (Lot 4) — `cross_references`
 
 Index inverse des références `#YYYY-NNN` détectées dans les contenus markdown. Reconstruit à chaque save d'une description ou d'un commentaire (subscriber Doctrine). Cf. specs §3.13.
 
@@ -362,7 +377,7 @@ Index inverse des références `#YYYY-NNN` détectées dans les contenus markdow
 
 **Index** : `(targetType, targetId, createdAt DESC)` pour la requête "objets référencés vers ici" (backlinks). `(sourceType, sourceId)` pour le diff au save.
 
-### 3.15 ApiToken (Lot 6) — `api_tokens`
+### 3.16 ApiToken (Lot 6) — `api_tokens`
 
 Pour les clés d'API citoyennes (à enrichir au Lot 6).
 
@@ -422,7 +437,7 @@ PK composite sur les deux colonnes, FK avec `ON DELETE CASCADE` côté entité p
                           └────────────┘
 ```
 
-Hors-graphe (transversaux) : `Category` (parent vers Category), `AuditEvent` (référence opaque tout sujet via `subjectType/subjectId`), `ExternalLink`, `Following`, `ApiToken`, `NotificationPreference`.
+Hors-graphe (transversaux) : `Category` (parent vers Category), `AuditEvent` (référence opaque tout sujet via `subjectType/subjectId`), `AuthentikGroup` (cache local des groupes Authentik, référencé par `WorkingGroup`), `ExternalLink`, `Following`, `CrossReference`, `ApiToken`, `NotificationPreference`.
 
 ## 6. Conventions d'évolution
 

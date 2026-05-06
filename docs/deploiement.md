@@ -183,7 +183,8 @@ OIDC_CLIENT_ID=...
 OIDC_CLIENT_SECRET=...
 OIDC_REDIRECT_URI=https://projets.mairie.example.fr/oidc/callback
 OIDC_SCOPES="openid email profile groups"
-OIDC_GROUP_ROLE_MAPPING="mairie-projets-lecteur:ROLE_LECTEUR,mairie-projets-agent:ROLE_AGENT,mairie-projets-chef:ROLE_CHEF_PROJET,mairie-projets-admin:ROLE_ADMIN"
+OIDC_ADMIN_GROUP=admin_spm
+OIDC_REQUIRED_GROUPS=spm_users
 
 TRUSTED_PROXIES=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
 ```

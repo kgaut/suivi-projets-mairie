@@ -63,21 +63,20 @@ Puis dans le provider, ajouter ce scope mapping à la liste des scopes.
 
 ### 1.4 Organiser les groupes Authentik
 
-L'application distingue deux usages des groupes Authentik :
+Avec le modèle de rôles dynamique (cf. specs §2), il n'y a **plus qu'un seul groupe Authentik dédié à l'application** : `admin_spm`. Tous les autres rôles (`ROLE_CHEF_PROJET`, `ROLE_ACTEUR`, `ROLE_LECTEUR`) sont calculés dynamiquement à chaque action en fonction de l'objet (Project ou Task) et de l'appartenance de l'utilisateur aux **groupes de travail** (qui sont des groupes Authentik existants — commissions, services, etc.).
 
-1. **Groupes de "rôle applicatif"** — déterminent ce qu'un utilisateur peut **faire** dans l'app (lecture seule, agent, chef de projet, admin). Mappés via `OIDC_GROUP_ROLE_MAPPING`.
-2. **Groupes "métier"** — correspondent à l'organigramme (commissions, services, groupes-projet) et alimentent les **Groupes de travail** (cf. specs §3.11). Mappés via l'admin de l'app.
+L'application distingue donc deux types de groupes :
+
+1. **Groupe d'admin applicatif** : `admin_spm` (nom configurable via `OIDC_ADMIN_GROUP`). Les membres ont `ROLE_ADMIN` partout dans l'app.
+2. **Groupes "métier"** — correspondent à l'organigramme (commissions, services, groupes-projet). Ils existent **déjà** côté Authentik. L'admin les déclare comme **groupes de travail** dans l'app (cf. specs §3.11), et l'appartenance d'un utilisateur à ces groupes alimente le calcul de `ROLE_ACTEUR` sur les Project/Task associés.
 
 #### Convention proposée (à adapter à votre namespace existant)
 
-**Groupes de rôle applicatif** :
+**Groupe d'admin applicatif** :
 
-- `<prefixe>-lecteur` (lecture seule)
-- `<prefixe>-agent` (création / mise à jour de tâches dans le périmètre)
-- `<prefixe>-chef` (gestion de projets)
-- `<prefixe>-admin` (administration de l'app)
+- `admin_spm` (administrateurs de l'application Suivi Projets Mairie)
 
-**Groupes métier** (exemples — utilisez les noms en place dans votre Authentik) :
+**Groupes métier** (exemples — utilisez les noms en place dans votre Authentik, l'app accepte n'importe lesquels) :
 
 - `commission-numerique`
 - `commission-jeunesse`
@@ -85,9 +84,9 @@ L'application distingue deux usages des groupes Authentik :
 - `elus-conseil-municipal`
 - ...
 
-> 💡 Le PO de la mairie utilise déjà des noms naturels du type `commission-numerique` et `agents-services-techniques`. Pas besoin de préfixe artificiel — l'application accepte n'importe quels noms de groupes existants.
+> 💡 Le PO utilise déjà des noms naturels du type `commission-numerique`. Aucun préfixe imposé : l'app récupère les noms de groupes via l'API Authentik et l'admin sélectionne ceux qui correspondent à des groupes de travail (cf. checkbox "Groupe Visible" dans l'admin, specs §3.11).
 
-Crée les groupes via **Directory → Groups → Create** et affecte tes utilisateurs.
+Crée le groupe `admin_spm` via **Directory → Groups → Create** et affecte les administrateurs. Les groupes métier existent normalement déjà.
 
 ### 1.5 Restreindre l'accès à l'application (filtrage SSO)
 
@@ -97,10 +96,10 @@ Décision tranchée : **filtrage à deux niveaux** (defense in depth).
 
 **Applications → Applications → Suivi Projets Mairie → Policy / Group / User Bindings**
 
-Lier un (ou plusieurs) groupe(s) Authentik à l'application avec une politique "any of" pour que **seuls** leurs membres puissent se connecter. Deux options :
+Lier un (ou plusieurs) groupe(s) Authentik à l'application avec une politique "any of" pour que **seuls** leurs membres puissent se connecter. Recommandation :
 
-- Option simple : lier directement les groupes de rôle applicatif (`<prefixe>-lecteur`, `<prefixe>-agent`, `<prefixe>-chef`, `<prefixe>-admin`).
-- Option "méga-groupe" : créer un groupe parent `mairie-projets-utilisateurs` qui contient tous les autres, et lier uniquement celui-là. Plus simple à maintenir si la liste évolue.
+- Créer un **méga-groupe** parent `spm_users` qui contient `admin_spm` + tous les groupes métier (commissions, services) destinés à utiliser l'application. Lier uniquement celui-là à l'application Authentik.
+- Plus simple à maintenir : à chaque nouveau groupe métier ajouté à l'app, on l'inclut dans `spm_users` et il a accès à l'app.
 
 Un utilisateur non membre verra une page d'erreur Authentik au login (jamais l'app).
 
@@ -110,9 +109,9 @@ L'application revérifie au callback OIDC qu'au moins un groupe Authentik de l'u
 
 ```dotenv
 # .env (exemple)
-OIDC_REQUIRED_GROUPS=mairie-projets-utilisateurs
+OIDC_REQUIRED_GROUPS=spm_users
 # ou si tu listes explicitement les groupes autorisés
-# OIDC_REQUIRED_GROUPS=commission-numerique,agents-services-techniques,elus-conseil-municipal
+# OIDC_REQUIRED_GROUPS=admin_spm,commission-numerique,agents-services-techniques,elus-conseil-municipal
 ```
 
 > Cette double vérification protège contre une mauvaise configuration côté Authentik (binding oublié après création d'un nouveau groupe). Si tu ne veux qu'un seul niveau, garde Authentik (plus solide), mais l'idéal est d'avoir les deux.
@@ -137,13 +136,14 @@ OIDC_REDIRECT_URI=https://projets.mairie.example.fr/oidc/callback
 # Scopes demandés
 OIDC_SCOPES="openid email profile groups"
 
-# Mapping groupes Authentik → rôles Symfony (séparateur : virgule, format : groupe:role)
-# Adapter aux groupes effectivement présents dans votre Authentik
-OIDC_GROUP_ROLE_MAPPING="mairie-projets-lecteur:ROLE_LECTEUR,mairie-projets-agent:ROLE_AGENT,mairie-projets-chef:ROLE_CHEF_PROJET,mairie-projets-admin:ROLE_ADMIN"
+# Groupe Authentik des admins applicatifs (seul rôle "statique").
+# Les autres rôles (CHEF_PROJET, ACTEUR, LECTEUR) sont calculés dynamiquement
+# par les voters (cf. specs §2).
+OIDC_ADMIN_GROUP="admin_spm"
 
 # Filtrage d'accès à l'application (defense in depth — voir §1.5)
 # L'utilisateur doit appartenir à au moins un de ces groupes pour pouvoir se connecter
-OIDC_REQUIRED_GROUPS="mairie-projets-utilisateurs"
+OIDC_REQUIRED_GROUPS="spm_users"
 ```
 
 ### 2.2 Bundle utilisé
@@ -162,7 +162,7 @@ Au callback, Symfony reçoit un payload du type :
   "email": "j.dupont@mairie.example.fr",
   "name": "Jean Dupont",
   "preferred_username": "jdupont",
-  "groups": ["mairie-projets-agent", "mairie-projets-chef"]
+  "groups": ["commission-numerique", "agents-services-techniques"]
 }
 ```
 
@@ -174,7 +174,7 @@ Le mapping côté app :
 | `email` | `email` |
 | `name` | `displayName` |
 | `preferred_username` | `username` |
-| `groups` | converti en `roles` via `OIDC_GROUP_ROLE_MAPPING` |
+| `groups` | stocké dans `groupsSnapshot` ; donne `ROLE_ADMIN` si contient `OIDC_ADMIN_GROUP`. Sert aussi au calcul dynamique des autres rôles (cf. specs §2 et §3.11) |
 
 **Règle de réconciliation** : on cherche d'abord par `authentikId`. Si non trouvé, on crée. **On ne réconcilie jamais par e-mail seul** (un changement d'e-mail dans Authentik ne doit pas casser le compte).
 
@@ -191,7 +191,7 @@ Deux niveaux :
 
 ### 3.1 Test manuel
 
-1. Crée un utilisateur de test dans Authentik, mets-le dans `mairie-projets-agent`.
+1. Crée un utilisateur de test dans Authentik, mets-le dans un groupe de travail (ex. `commission-numerique`) et dans `spm_users`.
 2. Va sur l'app, clique "Se connecter".
 3. Tu es redirigé vers Authentik, tu te logges.
 4. Tu es redirigé sur `/profile` (ou la page d'accueil) connecté.

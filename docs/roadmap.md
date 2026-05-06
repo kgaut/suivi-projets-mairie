@@ -37,7 +37,7 @@ Squelette technique opérationnel + section administration de base + infrastruct
 **Authentification**
 
 - [ ] Intégration Authentik OIDC (bundle `drenso/symfony-oidc-bundle` à confirmer)
-- [ ] Mapping groupes Authentik → rôles Symfony selon `OIDC_GROUP_ROLE_MAPPING`
+- [ ] Attribution de `ROLE_ADMIN` au login si l'utilisateur est dans le groupe Authentik défini par `OIDC_ADMIN_GROUP` (défaut `admin_spm`). Les autres rôles (`ROLE_CHEF_PROJET`, `ROLE_ACTEUR`, `ROLE_LECTEUR`) sont calculés dynamiquement par les voters (cf. specs §2)
 - [ ] **Filtrage d'accès par méga-groupe** : variable `OIDC_REQUIRED_GROUPS` (liste séparée par virgules). Au callback OIDC, l'app vérifie qu'au moins un groupe Authentik de l'utilisateur figure dans cette liste. Sinon, rejet avec page "Accès non autorisé" claire et événement audit `security.access_denied`. Defense in depth combiné avec la Policy Binding côté Authentik
 - [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, `avatarPath`, `authentikAvatarSourceUrl`, `authentikAvatarPath`, `authentikAvatarFetchedAt`, `avatarSource`, `gravatarAllowed`)
 - [ ] Réconciliation utilisateur au login (création si nouveau, mise à jour sinon, capture du claim `picture` Authentik)
@@ -80,15 +80,17 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 
 **Groupes de travail** (à faire en premier — Project/Task en dépendent)
 
-- [ ] Entité `WorkingGroup` (slug, name, description, color, icon, authentikGroup, position, archivedAt) + migration + fixtures
-- [ ] CRUD WorkingGroup en admin (liste, fiche, créer, éditer, archiver)
-- [ ] Champ "groupe Authentik mappé" (saisie texte simple, un seul groupe par WG, en v1)
-- [ ] Calcul des groupes de travail de l'utilisateur au login (vérification `authentikGroup ∈ user.authentikGroups`), mis en cache Redis
+- [ ] Entité `AuthentikGroup` (cache local des groupes Authentik) + entité `WorkingGroup` (slug, name, description, color, icon, authentikGroup FK, position, archivedAt) + migrations + fixtures
+- [ ] **Service de synchro Authentik** : `AuthentikGroupSynchronizer` qui appelle l'API admin Authentik (scope `read:group`), met à jour la table `authentik_groups`, marque les disparus avec `vanishedAt`. Cron horaire + bouton manuel "Actualiser" dans l'admin
+- [ ] Écran admin "Groupes Authentik" : liste paginée avec checkbox **`Visible`** par ligne (défaut décoché), boutons "Créer un groupe de travail" / "Modifier le mapping"
+- [ ] CRUD WorkingGroup en admin (liste, fiche, créer, éditer, archiver) — la sélection du groupe Authentik se fait depuis la liste des `AuthentikGroup` `visible`, plus de saisie libre
+- [ ] Calcul des groupes de travail de l'utilisateur au login (jointure `authentik_groups.authentikId ∈ user.authentikGroups`), mis en cache Redis
 - [ ] Méthode `User::getWorkingGroups()` exposée à Twig
 - [ ] Page de liste publique des groupes de travail actifs `/groupes-de-travail`
 - [ ] Vue détaillée `/groupes-de-travail/<slug>` (sera enrichie avec projets/tâches une fois Project/Task disponibles)
-- [ ] Indicateur "groupe Authentik inconnu" si l'`authentikGroup` mappé n'apparaît jamais dans les logins observés
-- [ ] Avertissement admin si plusieurs WorkingGroup pointent vers le même `authentikGroup`
+- [ ] Indicateur "mapping orphelin" si l'`AuthentikGroup` lié est marqué `vanishedAt`
+- [ ] Avertissement admin si plusieurs WorkingGroup pointent vers le même `AuthentikGroup`
+- [ ] **Voters Project / Task** qui calculent à la volée `ROLE_CHEF_PROJET` (owner/coOwner/createdBy), `ROLE_ACTEUR` (membre d'un WG associé), `ROLE_LECTEUR` (sinon, si visible)
 
 **Projets**
 

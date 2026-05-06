@@ -15,16 +15,23 @@ Outil interne d'une mairie permettant au délégué au numérique, aux élus et 
 
 ## 2. Acteurs et rôles
 
-Les rôles sont **dérivés des groupes Authentik**. Aucun rôle n'est géré dans l'application.
+Les rôles sont **calculés dynamiquement à chaque action**, en fonction de l'objet (Project ou Task) sur lequel l'utilisateur agit. Aucune table de rôles n'est gérée dans l'application : un seul groupe Authentik **statique** existe (`admin_spm`) ; les autres rôles sont contextuels.
 
-| Rôle Symfony | Groupe Authentik (à confirmer) | Description |
+| Rôle Symfony | Calcul | Description |
 |---|---|---|
-| `ROLE_LECTEUR` | `mairie-projets-lecteur` | Lecture seule sur tout |
-| `ROLE_AGENT` | `mairie-projets-agent` | Crée et met à jour ses tâches, commente |
-| `ROLE_CHEF_PROJET` | `mairie-projets-chef` | Gère un ou plusieurs projets, assigne des tâches |
-| `ROLE_ADMIN` | `mairie-projets-admin` | Gère les paramètres globaux, les catégories, etc. |
+| `ROLE_ADMIN` | **Statique** : membre du groupe Authentik `admin_spm` | Peut tout faire — gère les paramètres globaux, les catégories, les groupes de travail, voit même les objets `restricted` auxquels il n'appartient pas |
+| `ROLE_CHEF_PROJET` | **Dynamique** : pour un objet donné, l'utilisateur est `owner` ou `coOwner` du projet (ou du projet de la tâche), ou `createdBy` d'une tâche autonome | Gère son propre projet / sa propre tâche autonome (édition, transfert d'ownership, archivage, clôture, etc.) |
+| `ROLE_ACTEUR` | **Dynamique** : pour un objet donné, l'utilisateur est membre d'au moins un groupe de travail associé au projet ou à la tâche concernés | Crée des tâches dans le projet, met à jour les tâches dont il est `assignee`, commente, joint des fichiers |
+| `ROLE_LECTEUR` | **Dynamique** : utilisateur authentifié n'entrant dans aucun des cas ci-dessus pour l'objet considéré | Lecture seule (si l'objet est visible) |
 
-> 🟡 À préciser : noms exacts des groupes Authentik que tu utilises (ou que tu vas créer). L'application peut s'adapter via mapping dans `.env`.
+Le seul rôle "global" injecté dans `User::getRoles()` est `ROLE_ADMIN` (et `ROLE_USER` Symfony par défaut). Les autres rôles sont **transverses** et calculés par les voters Symfony à chaque appel `Voter::vote($subject)`. Cette approche est plus proche d'un modèle ABAC (attribute-based) que d'un RBAC strict, et évite que `ROLE_CHEF_PROJET` accordé en bloc donne accès à *tous* les projets.
+
+#### Conséquences pratiques
+
+- Un même utilisateur peut être **chef de projet sur le projet A**, **acteur sur le projet B** (membre d'un groupe de travail associé), et **lecteur sur le projet C** (visible mais sans appartenance), sans aucun changement de configuration côté Authentik.
+- Le seul groupe Authentik à provisionner pour l'application est **`admin_spm`** (le nom est configurable via `OIDC_REQUIRED_GROUPS` / `OIDC_ADMIN_GROUP` — cf. `docs/authentik.md`).
+- Les **groupes de travail** (cf. §3.11) sont la cheville ouvrière du calcul de `ROLE_ACTEUR` : pour qu'un utilisateur puisse contribuer à un projet/une tâche, il faut que cet objet soit associé à un groupe de travail dont il est membre.
+- L'accès **général à l'application** reste contrôlé par le filtrage Authentik (Policy Binding + `OIDC_REQUIRED_GROUPS`, cf. §5.3) : on n'authentifie que les utilisateurs autorisés à utiliser l'outil. Le filtrage par rôle ne joue que sur ce qu'on peut faire **une fois dedans**.
 
 ## 3. Concepts métier (modèle de domaine)
 
@@ -120,18 +127,24 @@ Les voters appliquent : `visible = (visibility=public_interne OR user∈restrict
 - `actif | en_pause | brouillon → annule` : "Annuler". Demande un motif. Les tâches du projet basculent automatiquement en `annulee`.
 - `termine → actif` ou `annule → actif` : interdit. Si réouverture nécessaire, créer un nouveau projet.
 
-#### Droits par rôle
+#### Droits par rôle (calculés dynamiquement, cf. §2)
 
-| Action | `ROLE_LECTEUR` | `ROLE_AGENT` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
+> Rappel : `ROLE_CHEF_PROJET` = `owner` ou `coOwner` du projet ; `ROLE_ACTEUR` = membre d'un groupe de travail associé ; `ROLE_LECTEUR` = utilisateur authentifié sans appartenance ; `ROLE_ADMIN` = membre statique de `admin_spm`.
+
+| Action | `ROLE_LECTEUR` | `ROLE_ACTEUR` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
 |---|---|---|---|---|
 | Voir un projet visible | ✓ | ✓ | ✓ | ✓ |
-| Créer un projet | ✗ | ✗ | ✓ | ✓ |
-| Éditer un projet dont je suis owner/coOwner | n/a | ✓ | ✓ | ✓ |
-| Éditer n'importe quel projet | ✗ | ✗ | ✗ | ✓ |
-| Transférer l'ownership | ✗ | ✗ | ✓ (si owner) | ✓ |
-| Archiver / désarchiver | ✗ | ✗ | ✓ (si owner) | ✓ |
-| Modifier un projet en `termine`/`annule` | ✗ | ✗ | ✗ | ✓ |
-| Voir un projet `restricted` sans appartenir aux groupes | ✗ | ✗ | ✗ | ✓ |
+| Voir un projet `restricted` sans appartenir aux groupes | ✗ | ✗ | ✓ (si owner/coOwner) | ✓ |
+| Créer un projet | ✗ | ✓ | n/a (devient owner → ROLE_CHEF_PROJET) | ✓ |
+| Éditer le projet (champs métier, ajout/retrait coOwners, etc.) | ✗ | ✗ | ✓ | ✓ |
+| Transférer l'ownership | ✗ | ✗ | ✓ | ✓ |
+| Archiver / désarchiver | ✗ | ✗ | ✓ | ✓ |
+| Clôturer (`actif → termine`) | ✗ | ✗ | ✓ | ✓ |
+| Annuler (`actif/en_pause/brouillon → annule`) | ✗ | ✗ | ✓ | ✓ |
+| Modifier un projet en `termine`/`annule` | ✗ | ✗ | ✓ | ✓ |
+| Supprimer un projet | ✗ | ✗ | ✗ | ✓ |
+
+> 💡 Pour créer un projet, il faut être membre d'au moins un groupe de travail (`ROLE_ACTEUR`). À la création, l'utilisateur devient automatiquement `owner` et donc `ROLE_CHEF_PROJET` sur ce projet. Cohérent : un utilisateur sans groupe de travail (lecteur) n'a pas vocation à porter un projet.
 
 #### Actions
 
@@ -188,7 +201,7 @@ Une tâche peut être assignée à un agent, et peut découler d'une demande ext
   - `workingGroups` est saisi manuellement (pas d'héritage possible).
   - Pas de cascade d'annulation (puisqu'il n'y a pas de projet parent).
   - Pas de contrainte "projet en pause" sur les transitions de statut.
-- **Vue dédiée** : `/taches/autonomes` (filtre `project=null AND parentTask=null` sur la liste générale), accessible aux rôles `ROLE_AGENT` et au-dessus.
+- **Vue dédiée** : `/taches/autonomes` (filtre `project=null AND parentTask=null` sur la liste générale), accessible à tout utilisateur authentifié (les voters appliquent ensuite la visibilité de chaque tâche listée).
 - **Promotion vers un projet** : un agent peut, plus tard, rattacher une tâche autonome à un projet existant (ou en créer un et y rattacher la tâche). L'opération est tracée dans l'audit (`task.attached_to_project`).
 
 #### Sous-tâches (`parentTask`)
@@ -274,21 +287,23 @@ Une tâche peut être **fille d'une autre tâche** (relation `parentTask`, FK au
 - **Si `project = null`** (tâche autonome) : aucune contrainte externe, le cycle de vie est libre.
 - Une tâche en `bloquee` depuis plus de N jours apparaît dans le dashboard "alertes" (paramètre, défaut 14 jours), qu'elle ait un projet ou non.
 
-#### Droits par rôle
+#### Droits par rôle (calculés dynamiquement, cf. §2)
 
-| Action | `ROLE_LECTEUR` | `ROLE_AGENT` | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
-|---|---|---|---|---|
-| Voir une tâche visible (incl. autonome) | ✓ | ✓ | ✓ | ✓ |
-| Créer une tâche dans un projet visible | ✗ | ✓ | ✓ | ✓ |
-| Créer une tâche autonome (sans projet) | ✗ | ✓ | ✓ | ✓ |
-| Modifier une tâche dont je suis assignee | n/a | ✓ | ✓ | ✓ |
-| Modifier une tâche dont je suis créateur (autonome) | n/a | ✓ | ✓ | ✓ |
-| Modifier une tâche d'un projet dont je suis owner/coOwner | n/a | ✓ | ✓ | ✓ |
-| Modifier toute tâche | ✗ | ✗ | ✗ | ✓ |
-| Réassigner | ✗ | ✓ (mes tâches) | ✓ (toutes les tâches du projet) | ✓ |
-| Annuler une tâche autonome | ✗ | ✓ (créateur ou assignee) | ✓ | ✓ |
-| Annuler une tâche d'un projet | ✗ | ✗ | ✓ (owner/coOwner) | ✓ |
-| Rattacher une tâche autonome à un projet | ✗ | ✗ | ✓ (du projet cible) | ✓ |
+> Sur une tâche, `ROLE_CHEF_PROJET` = `owner`/`coOwner` du projet de la tâche, ou `createdBy` d'une tâche autonome. `ROLE_ACTEUR` = membre d'un groupe de travail associé à la tâche (ou à son projet si héritage). `assignee` est traité comme un cas particulier en plus de ces rôles.
+
+| Action | `ROLE_LECTEUR` | `ROLE_ACTEUR` | `assignee` (de cette tâche) | `ROLE_CHEF_PROJET` | `ROLE_ADMIN` |
+|---|---|---|---|---|---|
+| Voir une tâche visible (incl. autonome) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| Voir une tâche `restricted` sans appartenir aux groupes | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Créer une tâche dans un projet | ✗ | ✓ | n/a | ✓ | ✓ |
+| Créer une tâche autonome (sans projet) | ✗ | ✓ | n/a | n/a (devient créateur → ROLE_CHEF_PROJET) | ✓ |
+| Éditer les champs métier (titre, description, priorité, échéance, effort) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Changer le statut (démarrer, bloquer, débloquer, envoyer en revue, clôturer) | ✗ | ✗ | ✓ | ✓ | ✓ |
+| (Ré)assigner une tâche | ✗ | ✓ (s'auto-assigner uniquement) | ✓ (transférer à un autre acteur) | ✓ | ✓ |
+| Annuler une tâche | ✗ | ✗ | ✓ | ✓ | ✓ |
+| Rattacher / détacher un projet | ✗ | ✗ | ✗ | ✓ | ✓ |
+| Créer une sous-tâche | ✗ | ✓ | ✓ | ✓ | ✓ |
+| Supprimer une tâche (vraie suppression — sinon préférer `annulee`) | ✗ | ✗ | ✗ | ✗ | ✓ |
 
 #### Actions
 
@@ -572,9 +587,24 @@ Permet au demandeur, sans compte ni mot de passe, de consulter et **commenter** 
 
 Un **groupe de travail** est une instance organisationnelle de la mairie qui peut piloter ou être impliquée dans des projets et tâches : commission thématique (jeunesse, urbanisme, finances), service municipal (services techniques, état civil), groupe-projet ad hoc, etc. Le terme "groupe de travail" est volontairement générique pour rester évolutif.
 
-L'appartenance à un groupe de travail est **dérivée d'un groupe Authentik unique** : un utilisateur appartient au groupe de travail si son groupe Authentik mappé figure dans ses groupes Authentik au login. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
+Un `WorkingGroup` est **adossé à un groupe Authentik unique** (relation 1-1) : un utilisateur appartient au groupe de travail si son groupe Authentik mappé figure dans ses groupes Authentik au login. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
+
+> 💡 L'appartenance à un groupe de travail conditionne le calcul du rôle `ROLE_ACTEUR` sur les Project / Task associés (cf. §2). C'est donc le pivot du modèle de droits.
+
+#### Découverte des groupes Authentik côté admin
+
+Pour faciliter le mapping et éviter la saisie texte libre source d'erreurs, l'application **synchronise** la liste des groupes Authentik via l'API admin Authentik (lecture seule, scope `read:group`).
+
+- À intervalle régulier (cron horaire ou bouton manuel "Actualiser"), l'app récupère la liste des groupes Authentik visibles et la stocke dans une table `authentik_groups` (cache local).
+- Dans l'admin, l'écran "Groupes de travail" affiche cette liste avec, pour chacun :
+  - Le nom du groupe Authentik
+  - Une **case à cocher "Visible"** : par défaut décochée, à cocher pour les groupes pertinents pour l'application. Les groupes décochés sont **masqués** des sélecteurs/filtres et ne peuvent pas être mappés à un `WorkingGroup`.
+  - Si visible : un bouton "Créer un groupe de travail" (ou "Modifier le groupe de travail mappé") qui pré-remplit le formulaire.
+- Cas d'usage : la mairie a typiquement 50+ groupes Authentik (RH, technique, élus, comptabilité, accès VPN…) dont seuls 5-10 sont pertinents pour cet outil. Le toggle "Visible" évite de polluer l'UI.
 
 #### Attributs
+
+##### Entité `WorkingGroup`
 
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
@@ -584,18 +614,32 @@ L'appartenance à un groupe de travail est **dérivée d'un groupe Authentik uni
 | `description` | text | ✗ | Présentation, périmètre, missions |
 | `color` | string (hex) | ✗ | Pour affichage (badges colorés en liste) |
 | `icon` | string | ✗ | Emoji ou nom d'icône |
-| `authentikGroup` | string (255) | ✗ | Nom du groupe Authentik mappé (un seul). Si vide, le groupe de travail existe mais sans appartenance auto |
+| `authentikGroup` | AuthentikGroup | ✓ | Référence vers l'entité miroir (cf. ci-dessous), une relation M2O. Un groupe Authentik peut avoir 0 ou 1 WorkingGroup |
 | `position` | int | ✓ | Ordre d'affichage |
 | `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'un groupe dissous |
 | `createdAt` / `createdBy` / `updatedAt` / `updatedBy` | | ✓ | |
 
+##### Entité miroir `AuthentikGroup`
+
+Cache local des groupes Authentik récupérés via l'API. Source : Authentik. Reconstruit à chaque synchro.
+
+| Attribut | Type | Obligatoire | Description |
+|---|---|---|---|
+| `id` | UUID v7 | ✓ | |
+| `authentikId` | string (64) | ✓ | UUID/PK du groupe côté Authentik (clé de réconciliation) |
+| `name` | string (255) | ✓ | Nom du groupe Authentik, peut évoluer côté Authentik |
+| `visible` | bool | ✓ | Toggle "Visible dans l'app" (défaut `false`) — décide si le groupe est proposé pour mapping ou non |
+| `lastSyncedAt` | datetime | ✓ | Dernière synchro réussie |
+| `vanishedAt` | datetime | ✗ | Si lors d'une synchro le groupe n'apparaît plus côté Authentik (suppression) |
+
+> Cette entité reste **passive** : aucun écran de CRUD direct dessus, juste une liste avec checkbox `visible` et indicateurs (date de découverte, "vanished").
+
 #### Mapping vers le groupe Authentik
 
-- Un groupe de travail est lié à **0 ou 1 groupe Authentik** (relation 1-1 optionnelle).
-- Le mapping est géré par les **admins** depuis l'interface (pas de `.env` : ça évolue avec l'organigramme).
-- Saisie : champ texte simple. Pas d'autocomplete depuis Authentik en v1 (éviterait un appel API à chaque ouverture du formulaire). En v1.x on pourra brancher l'API Authentik pour suggérer les groupes existants.
-- L'admin peut modifier le groupe Authentik mappé à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
-- Plusieurs groupes de travail **peuvent** pointer vers le même groupe Authentik (ex. plusieurs entités liées au même groupe "élus") — c'est autorisé mais signalé en avertissement dans l'admin.
+- Un `WorkingGroup` est obligatoirement lié à un `AuthentikGroup` `visible`. Plus de saisie texte libre.
+- L'admin peut changer le groupe Authentik mappé à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
+- Plusieurs `WorkingGroup` **peuvent** pointer vers le même `AuthentikGroup` (ex. plusieurs entités liées au même groupe "élus") — autorisé mais signalé en avertissement dans l'admin.
+- Si un `AuthentikGroup` est marqué `vanishedAt` (supprimé côté Authentik), les `WorkingGroup` qui le référencent affichent un avertissement (mapping orphelin) et l'appartenance auto cesse de fonctionner.
 
 #### Calcul de l'appartenance
 
@@ -855,7 +899,7 @@ Toutes les questions ouvertes initiales ont été tranchées avec le PO. Les dé
 | 2 | Framework CSS | **Tailwind CSS** |
 | 3 | Limites pièces jointes (interne) | **25 Mo / fichier, 10 fichiers max** par objet |
 | 4 | Rétention | **Logs 90 j**, **audit log 3 ans** |
-| 5 | Noms de groupes Authentik | Pas de convention `mairie-projets-*` ; on s'aligne sur les noms existants type `commission-numerique`, `agents-services-techniques`. Les groupes pour les rôles applicatifs (lecteur/agent/chef/admin) sont à choisir avec l'admin Authentik au moment du déploiement |
+| 5 | Groupes Authentik utilisés par l'app | **Un seul groupe applicatif statique** : `admin_spm` (configurable via `OIDC_ADMIN_GROUP`). Les autres rôles sont calculés dynamiquement (cf. §2). Les **groupes de travail** (commissions, services, etc.) réutilisent les groupes Authentik métier existants — l'admin coche ceux qui doivent être visibles dans l'app |
 | 6 | Intégrations externes | **GED à anticiper** (interface `AttachmentStorage` isolée, implémentation FileSystem en v1). Pas de LDAP, pas de parapheur en v1 |
 | 7 | Visibilité par défaut entre agents | **Tout est visible par défaut** (transparence interne). Pour la confidentialité, utiliser `visibility=restricted` ou `restrictedToWorkingGroups` |
 | 8 | Demandeur — champs obligatoires | **firstName + lastName obligatoires**, plus au moins un de `email`/`phone` |
@@ -865,7 +909,7 @@ Toutes les questions ouvertes initiales ont été tranchées avec le PO. Les dé
 | 12 | Revue obligatoire avant clôture | **Non** : l'assignée peut auto-valider sa propre revue. Mode "double validation" prévu en évolution future (paramètre par projet) |
 | 13 | Estimation d'effort | **T-shirt sizing** (XS / S / M / L / XL) |
 | 14 | Format de référence | **`#P-YYYY-NNN`** pour les projets, **`#T-YYYY-NNN`** pour les tâches. Compteurs **séparés** : séquences Postgres `project_reference_seq_<year>` et `task_reference_seq_<year>`. Le préfixe `P-`/`T-` lève l'ambiguïté lors du parsing des références croisées dans les textes (§3.13). Slug optionnel en suffixe pour la lisibilité (`#P-2026-014-refonte-site`), non vérifié à la résolution |
-| 15 | Mapping groupe de travail ↔ Authentik | **Saisie libre** maintenant ; autocomplete via API Authentik prévu en v1.x |
+| 15 | Mapping groupe de travail ↔ Authentik | **Synchro API Authentik dès le Lot 1** : entité miroir `AuthentikGroup` (cache local), checkbox "Visible dans l'app" par groupe, sélection depuis liste filtrée plutôt que saisie texte libre (révision de la décision initiale, motivée par le commentaire PO sur les nombreux groupes Authentik non pertinents) |
 | 16 | Visibilité par groupe de travail | **Hybride** : par défaut organisationnel uniquement, mais toggle `restrictedToWorkingGroups` sur Project pour réserver la visibilité aux membres des groupes de travail associés |
 | Bonus | Filtrage d'accès à l'application | **Côté Authentik (Policy Binding) + côté app (`OIDC_REQUIRED_GROUPS`)** — defense in depth |
 
