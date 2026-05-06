@@ -39,7 +39,7 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | Identifiant interne, immuable |
-| `reference` | string (10) | ✓ (généré) | Référence lisible incrémentale annuelle, ex. `#2026-014`, immuable. **Compteur unique partagé** entre Project et Task (cf. §8.14 et §3.13 références croisées) |
+| `reference` | string (12) | ✓ (généré) | Référence lisible incrémentale annuelle, ex. `P-2026-014`, immuable. Préfixe `P-` pour les projets (cf. §8.14). Stockée sans le `#` ; affichée avec `#` |
 | `slug` | string (255) | ✓ (généré) | Pour les URLs ; généré du titre, peut être édité par un admin |
 | `title` | string (255) | ✓ | Titre du projet |
 | `summary` | string (255) | ✗ | Résumé en une phrase, affiché dans les listes |
@@ -154,7 +154,7 @@ Une tâche peut être assignée à un agent, et peut découler d'une demande ext
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | Identifiant interne, immuable |
-| `reference` | string (10) | ✓ (généré) | Référence lisible, ex. `#2026-0042`, immuable, incrémentale annuelle. **Compteur unique partagé** avec Project (cf. §8.14 et §3.13) |
+| `reference` | string (12) | ✓ (généré) | Référence lisible, ex. `T-2026-0042`, immuable, incrémentale annuelle. Préfixe `T-` pour les tâches. Compteur séparé du compteur Project (cf. §8.14) |
 | `title` | string (255) | ✓ | Titre |
 | `description` | text (markdown) | ✗ | Détail de la tâche |
 | `status` | enum | ✓ | Voir cycle de vie ci-dessous |
@@ -652,17 +652,28 @@ Dans les **descriptions** (Project, Task) et les **commentaires** (Lot 4), les u
 
 #### Format
 
-- Référence courte : `#YYYY-NNN` (ex. `#2026-014`).
-- Référence longue (slug optionnel) : `#YYYY-NNN-slug-libre` (ex. `#2026-014-refonte-site`). Le slug n'est **pas** vérifié (pure aide visuelle pour le lecteur, comme sur GitHub).
-- L'unicité de `#YYYY-NNN` est globale : il n'y a **qu'une** entité (Project OU Task) qui porte cette référence dans une année donnée — cf. décision §8.14 mise à jour.
+- **Référence courte** : `#P-YYYY-NNN` (projet) ou `#T-YYYY-NNN` (tâche), ex. `#P-2026-014` ou `#T-2026-042`.
+- **Référence longue avec slug** (optionnel, style GitHub) : `#P-YYYY-NNN-slug-libre`, ex. `#P-2026-014-refonte-site`. Le slug est **purement décoratif** : il n'est ni vérifié ni utilisé pour la résolution. L'app résout uniquement sur `P-YYYY-NNN` ou `T-YYYY-NNN`.
+- Les compteurs Project et Task sont **séparés** (séquences Postgres dédiées), le préfixe `P-`/`T-` lève l'ambiguïté dans les textes (cf. décision §8.14).
+
+Exemple complet dans un commentaire :
+
+```markdown
+Cette tâche dépend de #T-2026-019 et concerne le projet #P-2026-014.
+
+À la suite du chantier #P-2026-014-refonte-site, on va devoir traiter
+les sous-tâches #T-2026-042-formulaire-contact et #T-2026-043.
+
+Pour le contexte, voir aussi le projet annulé #P-2025-007.
+```
 
 #### Détection
 
 Service `CrossReferenceParser` qui :
 
 1. Tokenise le markdown (en respectant les blocs de code et les liens existants — pas de transformation à l'intérieur de `\`\`\`` ou de `[texte](url)`).
-2. Extrait les `#YYYY-NNN` (regex stricte avec word boundaries pour éviter `#2026-014abc`).
-3. Résout chaque référence vers un Project ou une Task. Si la référence n'existe pas, le texte est laissé tel quel (pas de lien cassé).
+2. Extrait les références matchant la regex `#(?P<type>[PT])-(?P<year>\d{4})-(?P<num>\d{1,5})(?:-[a-z0-9-]+)?\b` (le slug suffixe est capturé mais ignoré pour la résolution).
+3. Résout chaque référence vers un Project (si `P-`) ou une Task (si `T-`). Si la référence n'existe pas, le texte est laissé tel quel (pas de lien cassé, pas d'entrée dans `cross_references`).
 4. Remplace dans le rendu HTML par un `<a>` avec :
    - URL : `/projets/<slug>` ou `/taches/<id>` (selon le type)
    - Texte : la référence telle qu'écrite (avec slug si présent)
@@ -686,11 +697,15 @@ Suppression / édition : à chaque save, on diff l'ancienne et la nouvelle liste
 Composant Stimulus inspiré de l'expérience GitHub :
 
 - Déclencheur : saisie du caractère `#` dans une textarea markdown (description, commentaire).
-- Endpoint backend : `GET /api/internal/references/search?q=<query>&limit=10` qui retourne JSON : `[{ ref, type, title, status, url }, ...]`.
-- Recherche : par référence (`#2026-` matche les refs de l'année), par titre (full-text Postgres `tsvector`), priorisée par récence (dernière modification).
+- Endpoint backend : `GET /api/internal/references/search?q=<query>&type=<P|T|both>&limit=10` qui retourne JSON : `[{ ref, type, title, status, url }, ...]`.
+- Heuristique sur `q` :
+  - `P-2026-` → restreint aux projets de l'année
+  - `T-` → restreint aux tâches
+  - texte libre → recherche par titre (full-text Postgres `tsvector`)
+- Priorisée par récence (dernière modification) puis pertinence titre.
 - Sécurité : applique les voters — seuls les objets visibles par l'utilisateur courant remontent.
 - Rate limit : 30 requêtes / minute / utilisateur (Symfony RateLimiter + Redis), cache navigateur 5 secondes.
-- À la sélection, insère `#YYYY-NNN-slug` dans le textarea.
+- À la sélection, insère `#P-YYYY-NNN-slug` ou `#T-YYYY-NNN-slug` dans le textarea (slug du titre kebab-cased, tronqué à 40 car).
 
 #### Audit
 
@@ -851,7 +866,7 @@ Toutes les questions ouvertes initiales ont été tranchées avec le PO. Les dé
 | 11 | Statuts visibles par le demandeur | **Libellés simplifiés mappés** : Reçu / En traitement / Traité / Sans suite. Mapping fixe en v1 (pas de surcharge) |
 | 12 | Revue obligatoire avant clôture | **Non** : l'assignée peut auto-valider sa propre revue. Mode "double validation" prévu en évolution future (paramètre par projet) |
 | 13 | Estimation d'effort | **T-shirt sizing** (XS / S / M / L / XL) |
-| 14 | Format de référence | **`#YYYY-NNN`** (sans préfixe). **Compteur unique partagé Project + Task** (séquence Postgres unique `entity_reference_seq_<year>`) — révision de la décision initiale, motivée par les références croisées §3.13 (un même `#YYYY-NNN` ne peut désigner qu'une entité). Slug optionnel en suffixe pour la lisibilité (`#2026-014-refonte-site`), non vérifié à la résolution |
+| 14 | Format de référence | **`#P-YYYY-NNN`** pour les projets, **`#T-YYYY-NNN`** pour les tâches. Compteurs **séparés** : séquences Postgres `project_reference_seq_<year>` et `task_reference_seq_<year>`. Le préfixe `P-`/`T-` lève l'ambiguïté lors du parsing des références croisées dans les textes (§3.13). Slug optionnel en suffixe pour la lisibilité (`#P-2026-014-refonte-site`), non vérifié à la résolution |
 | 15 | Mapping groupe de travail ↔ Authentik | **Saisie libre** maintenant ; autocomplete via API Authentik prévu en v1.x |
 | 16 | Visibilité par groupe de travail | **Hybride** : par défaut organisationnel uniquement, mais toggle `restrictedToWorkingGroups` sur Project pour réserver la visibilité aux membres des groupes de travail associés |
 | Bonus | Filtrage d'accès à l'application | **Côté Authentik (Policy Binding) + côté app (`OIDC_REQUIRED_GROUPS`)** — defense in depth |

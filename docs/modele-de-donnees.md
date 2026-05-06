@@ -67,7 +67,7 @@ Spec : `docs/specifications.md` §3.1.
 | Champ | Type PHP | Type SQL | N | Notes |
 |---|---|---|---|---|
 | `id` | `Uuid` | `uuid` | ✗ | PK |
-| `reference` | `string` | `varchar(10)` | ✗ | Unique, format `#YYYY-NNN`, **séquence partagée** `entity_reference_seq_<year>` (compteur unique Project + Task, cf. specs §8.14) |
+| `reference` | `string` | `varchar(12)` | ✗ | Unique, format `P-YYYY-NNN` (préfixe stocké, `#` purement d'affichage). Séquence Postgres `project_reference_seq_<year>` (cf. specs §8.14) |
 | `slug` | `string` | `varchar(255)` | ✗ | Unique |
 | `title` | `string` | `varchar(255)` | ✗ | |
 | `summary` | `?string` | `varchar(255)` | ✓ | |
@@ -99,7 +99,7 @@ Spec : `docs/specifications.md` §3.2.
 | Champ | Type PHP | Type SQL | N | Notes |
 |---|---|---|---|---|
 | `id` | `Uuid` | `uuid` | ✗ | PK |
-| `reference` | `string` | `varchar(10)` | ✗ | Unique, **séquence partagée** avec Project (cf. specs §8.14) |
+| `reference` | `string` | `varchar(12)` | ✗ | Unique, format `T-YYYY-NNN`. Séquence Postgres `task_reference_seq_<year>` distincte de celle de Project (cf. specs §8.14) |
 | `title` | `string` | `varchar(255)` | ✗ | |
 | `description` | `?string` | `text` | ✓ | Markdown |
 | `status` | `TaskStatus` | `varchar(32)` | ✗ | enum |

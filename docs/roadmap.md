@@ -95,11 +95,11 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 - [ ] Workflow Symfony pour le cycle de vie (5 statuts, transitions définies en §3.1)
 - [ ] CRUD Project (liste paginée, fiche, créer, éditer, archiver/désarchiver)
 - [ ] Filtres liste : statut, visibilité, owner, groupe de travail, category, archived ou non
-- [ ] Recherche par référence (`#2026-014`) ou texte
+- [ ] Recherche par référence (`#P-2026-014`) ou texte
 - [ ] Voters Project : owner / coOwner / restricted visibility
 - [ ] Transfert d'ownership (modale dédiée + audit)
 - [ ] Duplication d'un projet (copie en `brouillon` sans tâches)
-- [ ] Génération de la référence `#YYYY-NNN` (incrémentale annuelle, **séquence Postgres unique partagée** `entity_reference_seq_<year>` — utilisée aussi par Task, cf. specs §8.14)
+- [ ] Génération de la référence `P-YYYY-NNN` (incrémentale annuelle, séquence Postgres `project_reference_seq_<year>`, cf. specs §8.14)
 - [ ] Toggle `restrictedToWorkingGroups` sur Project (visibilité réservée aux membres des groupes de travail associés, cf. specs §3.1)
 
 **Tâches**
@@ -114,7 +114,7 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 - [ ] Champ "motif" obligatoire pour les transitions vers `bloquee` et `annulee`
 - [ ] Cascade : annulation automatique des tâches d'un projet `annule` (uniquement si la tâche a un projet)
 - [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule` (uniquement si la tâche a un projet)
-- [ ] Génération de la référence `#YYYY-NNN` (séquence Postgres **unique partagée** avec Project, cf. décision §8.14)
+- [ ] Génération de la référence `T-YYYY-NNN` (séquence Postgres `task_reference_seq_<year>`, distincte de celle de Project — cf. décision §8.14)
 - [ ] Vue "Mes tâches" (assigné = moi) avec onglets par statut
 - [ ] Voters Task : assignée à moi / créateur (autonome) / projet dont je suis owner / admin
 - [ ] Surcharge des groupes de travail au niveau de la tâche (par défaut hérités du projet quand projet présent)
@@ -177,13 +177,13 @@ Visualisation et recherche.
 - [ ] Commentaires markdown sur Project et Task
 - [ ] Champ "visible par le demandeur" sur les commentaires de Task (case à cocher, faux par défaut)
 - [ ] Mentions `@utilisateur` (autocomplete)
-- [ ] **Références croisées `#YYYY-NNN`** dans descriptions et commentaires (cf. specs §3.13) :
+- [ ] **Références croisées `#P-YYYY-NNN` / `#T-YYYY-NNN`** dans descriptions et commentaires (cf. specs §3.13) :
   - [ ] Service `CrossReferenceParser` (regex stricte, respect des blocs de code et liens existants)
   - [ ] Linkifier markdown → HTML avec tooltip (statut, titre, assignée) et classes CSS par statut
   - [ ] Entité `CrossReference` + subscriber Doctrine qui diff/insère au save de Project, Task, Comment
   - [ ] Bloc "Référencé dans" sur les fiches Project et Task (backlinks ordonnés par date)
   - [ ] Endpoint `GET /api/internal/references/search?q=...` (full-text Postgres, voters appliqués, rate limit 30/min)
-  - [ ] Composant Stimulus d'autocomplete au caractère `#` dans les textareas markdown (style GitHub), insertion `#YYYY-NNN-slug` à la sélection
+  - [ ] Composant Stimulus d'autocomplete au caractère `#` dans les textareas markdown (style GitHub), insertion `#P-YYYY-NNN-slug` ou `#T-YYYY-NNN-slug` à la sélection
 - [ ] Pièces jointes (upload, prévisualisation, suppression) — limites : **25 Mo / fichier, 10 fichiers max** par objet, types autorisés cf. specs §3.5
 - [ ] Interface `AttachmentStorage` isolée (implémentation `FileSystemStorage` en v1) pour permettre une bascule future vers une GED externe sans toucher au métier
 - [ ] Notifications in-app pour les agents (badge + dropdown)

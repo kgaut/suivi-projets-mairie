@@ -39,7 +39,7 @@ Pour les sujets transverses : `docs/authentik.md` (OIDC), `docs/deploiement.md`
 - Symfony 7.x + Twig + Turbo/Stimulus + Tailwind, FrankenPHP en mode worker
 - PHP 8.4, PostgreSQL 16, Redis 7
 - Authentik OIDC (filtrage `OIDC_REQUIRED_GROUPS` en defense in depth)
-- Référence `#YYYY-NNN` (compteurs séparés Project/Task)
+- Référence `#P-YYYY-NNN` (projet) / `#T-YYYY-NNN` (tâche), compteurs séparés
 - Tâches autonomes (sans projet parent) autorisées
 - Visibilité par défaut : tout est visible aux agents authentifiés
 - Effort en t-shirt sizing (XS/S/M/L/XL)
