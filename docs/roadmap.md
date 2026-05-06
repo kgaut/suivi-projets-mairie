@@ -38,9 +38,11 @@ Squelette technique opérationnel + section administration de base + infrastruct
 - [ ] Intégration Authentik OIDC (bundle `drenso/symfony-oidc-bundle` à confirmer)
 - [ ] Mapping groupes Authentik → rôles Symfony selon `OIDC_GROUP_ROLE_MAPPING`
 - [ ] **Filtrage d'accès par méga-groupe** : variable `OIDC_REQUIRED_GROUPS` (liste séparée par virgules). Au callback OIDC, l'app vérifie qu'au moins un groupe Authentik de l'utilisateur figure dans cette liste. Sinon, rejet avec page "Accès non autorisé" claire et événement audit `security.access_denied`. Defense in depth combiné avec la Policy Binding côté Authentik
-- [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`)
-- [ ] Réconciliation utilisateur au login (création si nouveau, mise à jour sinon)
-- [ ] Page `/profile` (groupes Authentik affichés, lien vers Authentik)
+- [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, `avatarPath`, `authentikAvatarUrl`, `avatarSource`, `gravatarAllowed`)
+- [ ] Réconciliation utilisateur au login (création si nouveau, mise à jour sinon, capture du claim `picture` Authentik dans `authentikAvatarUrl`)
+- [ ] Service `UserAvatarResolver` (priorité upload local → Authentik → Gravatar → initiales SVG, cf. specs §3.8)
+- [ ] Filtre Twig `user|avatar(size)` qui encapsule le résolveur
+- [ ] Page `/profile` : groupes Authentik affichés, lien vers Authentik, **upload d'avatar local** (jpg/png/webp, 2 Mo, resize 512×512), toggle "fallback Gravatar autorisé", sélecteur `avatarSource` (auto / local / authentik / gravatar / initials)
 - [ ] Logout local + logout SSO côté Authentik
 - [ ] Voter de base + handlers `AccessDeniedException`
 

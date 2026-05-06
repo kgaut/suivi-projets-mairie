@@ -320,6 +320,19 @@ L'utilisateur n'est **pas géré dans l'app** : il est créé/modifié/supprimé
 - **Cycle de vie** : l'utilisateur apparaît dans la base au premier login OIDC. Si Authentik renvoie un utilisateur déjà connu (même `authentikId`), on met à jour ses infos.
 - **Désactivation** : si l'utilisateur n'arrive plus à se connecter (suppression côté Authentik), il reste en base avec ses contributions intactes. Une commande `app:users:reconcile` (à venir) peut interroger l'API Authentik pour marquer les comptes orphelins.
 
+#### Avatar
+
+Trois sources possibles, résolues dans cet ordre par un service `UserAvatarResolver` :
+
+1. **Upload local** (`avatarPath` sur `User`) — **prioritaire si renseigné**. L'utilisateur peut uploader sa propre photo depuis `/profile`. Stocké via l'interface `AttachmentStorage` (cf. §3.5), formats jpg/png/webp, 2 Mo max, redimensionnement serveur à 512 × 512 px.
+2. **Authentik** — récupéré au login depuis le claim `picture` du userinfo OIDC (si l'utilisateur a une photo dans son profil Authentik). Stocké en URL dans `authentikAvatarUrl` sur `User`, mis à jour à chaque login. Affiché tel quel (URL directe vers Authentik), sans téléchargement local en v1.
+3. **Gravatar** — fallback automatique calculé depuis l'e-mail (hash SHA-256, conforme à la nouvelle API Gravatar). URL : `https://gravatar.com/avatar/{hash}?d=404&s=512`. Le `d=404` permet de détecter l'absence côté Gravatar et de basculer sur le fallback final.
+4. **Fallback final** : initiales du `displayName` (ex. "JM" pour Jean Martin) sur fond coloré dérivé de l'`authentikId` (couleur stable par utilisateur). Rendu côté serveur en SVG inline pour éviter la dépendance externe.
+
+Helper Twig `{{ user|avatar(size=64) }}` qui encapsule la logique. Le service prend en compte une **préférence utilisateur** `avatarSource` (`auto` par défaut = priorité ci-dessus, `local`, `authentik`, `gravatar`, `initials`) pour permettre à un utilisateur de forcer l'une des sources.
+
+> 🔒 **Privacy** : Gravatar n'est interrogé que si l'utilisateur n'a pas désactivé cette source dans `/profile` (toggle "Autoriser le fallback Gravatar pour mon avatar"). Par défaut activé pour les comptes nouvellement créés mais désactivable. La requête vers gravatar.com fuite l'e-mail (sous forme de hash) — affiché clairement dans la page profil.
+
 ### 3.9 Événement d'audit (audit log)
 
 Trace immuable de toutes les actions importantes effectuées dans l'application. **Pas un log technique** (qui va dans `var/log`), mais un journal métier consultable par les admins.
