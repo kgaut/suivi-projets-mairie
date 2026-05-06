@@ -1,0 +1,18 @@
+<footer class="mt-auto border-t border-slate-200 bg-white">
+    <div class="mx-auto flex max-w-6xl flex-col items-start justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:flex-row sm:items-center">
+        <div>
+            <span>Suivi Projets Mairie</span>
+            {% set appVersion = app.request.server.get('APP_VERSION') ?: 'dev' %}
+            <span class="text-slate-400"> · v{{ appVersion }}</span>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="https://github.com/kgaut/suivi-projets-mairie" rel="noopener noreferrer" class="hover:text-slate-700">
+                Code source
+            </a>
+            <span aria-hidden="true">·</span>
+            <span>
+                <a href="https://github.com/kgaut/suivi-projets-mairie/blob/main/LICENSE" rel="noopener noreferrer" class="hover:text-slate-700">AGPL-3.0</a>
+            </span>
+        </div>
+    </div>
+</footer>
