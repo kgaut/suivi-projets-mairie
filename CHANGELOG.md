@@ -24,6 +24,11 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - Bootstrap Symfony 7.4 LTS (php ^8.4) avec Flex : `composer.json`, `composer.lock`, `symfony.lock`, structure `bin/console`, `public/index.php`, `config/`, `templates/base.html.twig`
 - Structure d'architecture `src/` : `Controller/`, `Domain/`, `Application/`, `Infrastructure/`, `Security/`, `Twig/` (cf. `docs/specifications.md` §5.2)
 - Route `/` (`HomeController`) qui rend "Hello SPM" via Twig — premier signe de vie de l'application
+- `.gitignore` : exclusion des overrides compose locaux (`docker-compose.yml`, `docker-compose.override.yml`)
+- `Dockerfile` multi-stages (`base` / `dev` / `prod`) basé sur `dunglas/frankenphp:1-php8.4` avec extensions PHP nécessaires (intl, opcache, apcu, pdo_pgsql, redis, zip, composer)
+- Confs PHP par stage : `docker/php/conf.d/zz-app.ini` (partagée), `docker/php/conf.d-dev/zz-dev.ini` (validate_timestamps + Xdebug optionnel), `docker/php/conf.d-prod/zz-prod.ini` (preload + opcache figé)
+- `docker-compose.dev.yml` (renommé depuis `docker-compose.dev.yml.example`) — FrankenPHP en HTTPS sur `spm.localhost` (CA Caddy persistée), Postgres 16, Redis 7, Mailpit ; vars d'env `DATABASE_URL`/`REDIS_URL`/`MAILER_DSN` pré-câblées
+- `.dockerignore` pour garder les builds rapides et l'image prod légère
 
 ## [0.0.1] - 2026-05-06
 

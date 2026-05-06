@@ -88,12 +88,12 @@ Puis `docker compose -f docker-compose.dev.yml up -d` régénère le certificat 
 
 Services lancés :
 
-- **`app`** — image FrankenPHP buildée localement avec un Dockerfile dev (Xdebug, sources montées en volume, mode `dev`)
+- **`app`** — image FrankenPHP (cible `dev`) buildée localement via `docker/Dockerfile`, sources montées en volume, Xdebug installé désactivé par défaut
 - **`postgres`** — PostgreSQL 16
 - **`redis`** — Redis 7
 - **`mailpit`** — capture les e-mails sortants pour les tester sans les envoyer
 
-Voir `docker-compose.dev.yml.example` à la racine pour le squelette.
+Le compose se trouve à la racine : `docker-compose.dev.yml`.
 
 ## 5. Commandes courantes (Makefile)
 
