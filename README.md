@@ -46,4 +46,6 @@ Voir [`docs/local-dev.md`](docs/local-dev.md) pour le détail.
 
 ## Licence
 
-À définir.
+[GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+Choix de l'AGPL plutôt que de la GPL stricte : le projet est destiné à être utilisé en mode hébergé (par la mairie elle-même ou, à terme, par d'autres collectivités). L'AGPL garantit que toute amélioration apportée par un hébergeur sera reversée à la communauté, même si l'application n'est pas redistribuée comme un binaire.

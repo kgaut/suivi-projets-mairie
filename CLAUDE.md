@@ -58,6 +58,11 @@ Pour les sujets transverses : `docs/authentik.md` (OIDC), `docs/deploiement.md`
   §8 (table des décisions) dans le **même commit**
 - Si tu modifies les conventions de workflow : `docs/workflow.md` ET ce fichier
 
+## Licence
+
+AGPL-3.0 (cf. `LICENSE` à la racine). Le code de l'application doit donc
+rester compatible AGPL — pas de dépendance propriétaire incompatible.
+
 ## Branche de la session courante
 
 `claude/municipal-project-tool-b8H4z` (PR #1, draft, en cours de relecture).
