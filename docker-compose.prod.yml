@@ -1,0 +1,121 @@
+# Stack docker compose pour la production.
+#
+# Cf. docs/deploiement.md §3 pour l'architecture détaillée :
+# - Caddy frontal (instance partagée mairie) terminée TLS, déléguant à app:80
+# - Networks isolés : caddy_net (proxy ↔ app) et internal_net (app/worker/db/redis/migrate)
+# - Service `migrate` one-shot bloquant : app et worker ne démarrent qu'après une
+#   migration réussie (justification §6.1)
+#
+# Démarrage : docker compose -f docker-compose.prod.yml up -d
+# Mise à jour : docker compose -f docker-compose.prod.yml pull && up -d
+#
+# Le réseau `caddy_net` doit exister au préalable :
+#   docker network create caddy_net
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: prod
+    image: ghcr.io/kgaut/suivi-projets-mairie:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+    volumes:
+      - uploads:/app/var/uploads
+      - logs:/app/var/log
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal_net, caddy_net]
+    # Routage Caddy : la conf vit dans le Caddyfile global du frontal (cf. docs/deploiement.md §3.1).
+    # Pas de labels ici — l'app n'a pas conscience du proxy.
+
+  worker:
+    image: ghcr.io/kgaut/suivi-projets-mairie:${APP_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+    command: ["php", "bin/console", "messenger:consume", "async", "--time-limit=3600", "--memory-limit=256M"]
+    volumes:
+      - uploads:/app/var/uploads
+      - logs:/app/var/log
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal_net]
+
+  # Service one-shot : exécute les migrations Doctrine puis sort.
+  # Lancé automatiquement par `up -d` ; app et worker attendent qu'il finisse
+  # avec succès via depends_on/service_completed_successfully.
+  # Si la migration échoue, app et worker ne démarrent pas (pas de trafic vers
+  # une base incohérente). Logs accessibles via `docker compose logs migrate`.
+  migrate:
+    image: ghcr.io/kgaut/suivi-projets-mairie:${APP_VERSION:-latest}
+    env_file: .env
+    environment:
+      APP_ENV: prod
+      APP_DEBUG: 0
+    command: ["php", "bin/console", "doctrine:migrations:migrate", "--no-interaction", "--allow-no-migration"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal_net]
+    restart: "no"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
+      interval: 5s
+      retries: 10
+    networks: [internal_net]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+    networks: [internal_net]
+
+volumes:
+  pgdata:
+  redisdata:
+  uploads:
+  logs:
+
+networks:
+  # Réseau interne au projet : app, worker, postgres, redis, migrate.
+  # Pas exposé à l'extérieur, pas accessible depuis le reverse proxy.
+  internal_net:
+    driver: bridge
+  # Réseau partagé avec le Caddy frontal et les autres apps de la mairie.
+  # Seul le service `app` y est attaché ; postgres/redis ne sont JAMAIS dessus.
+  # À créer une fois pour toutes : `docker network create caddy_net`.
+  caddy_net:
+    external: true

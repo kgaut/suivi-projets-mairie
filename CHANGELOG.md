@@ -30,6 +30,7 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - `docker-compose.dev.yml` (renommé depuis `docker-compose.dev.yml.example`) — FrankenPHP en HTTPS sur `spm.localhost` (CA Caddy persistée), Postgres 16, Redis 7, Mailpit ; vars d'env `DATABASE_URL`/`REDIS_URL`/`MAILER_DSN` pré-câblées
 - `.dockerignore` pour garder les builds rapides et l'image prod légère
 - `Makefile` à la racine qui wrappe les commandes Docker, Symfony et qualité ; `make help` affiche les cibles regroupées par section (Démarrage, Installation, Développement, Tests, Qualité). Cibles destructrices (`clean`, `reset`) demandent une confirmation interactive ; cibles de qualité (`stan`, `cs`, `rector`, etc.) sont déclarées même si les outils ne sont pas encore installés (l'erreur sera explicite à l'appel)
+- `docker-compose.prod.yml` complet — services `app` (FrankenPHP mode worker), `worker` (Messenger consume), `migrate` (one-shot bloquant), `postgres:16-alpine`, `redis:7-alpine` ; networks isolés `internal_net` (services) et `caddy_net` (proxy externe partagé) ; volumes `pgdata`, `redisdata`, `uploads`, `logs` ; `app` et `worker` en `depends_on: { migrate: { condition: service_completed_successfully } }` (pas de trafic vers une base incohérente si la migration échoue) ; image GHCR taguée par `APP_VERSION` avec `build` local en fallback
 
 ## [0.0.1] - 2026-05-06
 
