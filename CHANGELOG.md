@@ -31,6 +31,14 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - `.dockerignore` pour garder les builds rapides et l'image prod légère
 - `Makefile` à la racine qui wrappe les commandes Docker, Symfony et qualité ; `make help` affiche les cibles regroupées par section (Démarrage, Installation, Développement, Tests, Qualité). Cibles destructrices (`clean`, `reset`) demandent une confirmation interactive ; cibles de qualité (`stan`, `cs`, `rector`, etc.) sont déclarées même si les outils ne sont pas encore installés (l'erreur sera explicite à l'appel)
 - `docker-compose.prod.yml` complet — services `app` (FrankenPHP mode worker), `worker` (Messenger consume), `migrate` (one-shot bloquant), `postgres:16-alpine`, `redis:7-alpine` ; networks isolés `internal_net` (services) et `caddy_net` (proxy externe partagé) ; volumes `pgdata`, `redisdata`, `uploads`, `logs` ; `app` et `worker` en `depends_on: { migrate: { condition: service_completed_successfully } }` (pas de trafic vers une base incohérente si la migration échoue) ; image GHCR taguée par `APP_VERSION` avec `build` local en fallback
+- **Tailwind CSS 4.1** via `symfonycasts/tailwind-bundle` (binaire standalone, pas de Node) — `assets/styles/app.css` avec `@import "tailwindcss";`, build via `bin/console tailwind:build` (ou `tailwind:build --watch` en dev)
+- **AssetMapper** Symfony natif (pas de Node, pas de Webpack) — `assets/`, `importmap.php`, point d'entrée `app.js`
+- **Symfony UX Turbo** (`@hotwired/turbo` 8.x) pour la navigation Turbo et les frames
+- **Symfony UX Stimulus** (`@hotwired/stimulus` 3.x) pour les controllers JS côté client
+- **Symfony UX Live Components** pour les composants Twig réactifs côté serveur
+- `src/Twig/Components/HelloLive.php` + `templates/components/HelloLive.html.twig` : démo Live Component (compteur incrémenté côté serveur)
+- `assets/controllers/hello_controller.js` : démo Stimulus côté client (toggle de message)
+- Page d'accueil refondue avec Tailwind + démos Stimulus et Live Component côté à côté
 
 ## [0.0.1] - 2026-05-06
 
