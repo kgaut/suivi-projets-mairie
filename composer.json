@@ -81,6 +81,7 @@
         }
     },
     "require-dev": {
+        "doctrine/doctrine-fixtures-bundle": "*",
         "phpunit/phpunit": "*",
         "symfony/browser-kit": "7.4.*",
         "symfony/css-selector": "7.4.*",

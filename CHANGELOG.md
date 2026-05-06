@@ -22,6 +22,7 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - **Entité `App\Domain\User`** (projection locale d'Authentik) — PK Uuid v7, `authentikId` unique, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, attributs avatar (`avatarPath`, `authentikAvatarSourceUrl`, `authentikAvatarPath`, `authentikAvatarFetchedAt`), `avatarSource`, `gravatarAllowed`, `createdAt`, `updatedAt`. Implémente `Symfony\Component\Security\Core\User\UserInterface` avec `getUserIdentifier()` retournant `authentikId` (clé stable)
 - **Enum `App\Domain\Enum\AvatarSource`** : `AUTO` / `LOCAL` / `AUTHENTIK` / `GRAVATAR` / `INITIALS`
 - **`App\Infrastructure\Repository\UserRepository`** avec `findOneByAuthentikId()` pour la réconciliation au login
+- `doctrine/doctrine-fixtures-bundle` en require-dev (placeholder `AppFixtures` vide, sera enrichi au Lot 1) — corrige `make install` qui appelait `doctrine:fixtures:load` sans bundle installé
 - Migration Doctrine `Version20260506144756` créant la table `users` (Postgres : `JSON`, `UUID`, `TIMESTAMP WITHOUT TIME ZONE`, index unique `authentik_id`, index `email`)
 - Configuration Doctrine pointée vers `src/Domain` (au lieu de `src/Entity` par défaut), conforme aux specs §5.2
 - Bundles installés : `symfony/orm-pack`, `doctrine/doctrine-migrations-bundle`, `symfony/uid`, `symfony/security-bundle`, `symfony/test-pack` (phpunit en require-dev)
