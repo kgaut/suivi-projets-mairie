@@ -84,8 +84,6 @@ Spec : `docs/specifications.md` §3.1.
 | `startDate` | `?\DateTimeImmutable` | `date_immutable` | ✓ | |
 | `dueDate` | `?\DateTimeImmutable` | `date_immutable` | ✓ | |
 | `actualEndDate` | `?\DateTimeImmutable` | `date_immutable` | ✓ | Renseigné à la transition `TERMINE` |
-| `budgetPlanned` | `?Money` | `decimal(12,2)` | ✓ | EUR |
-| `budgetSpent` | `?Money` | `decimal(12,2)` | ✓ | EUR |
 | `archivedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | Drapeau d'archivage |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
 | `createdBy` / `updatedBy` | `User` | FK `uuid` | ✗ | M2O `User` |

@@ -56,8 +56,6 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 | `startDate` | date | ✗ | Date de début prévisionnelle |
 | `dueDate` | date | ✗ | Date d'échéance prévisionnelle |
 | `actualEndDate` | date | ✗ (renseignée à la transition `termine`) | Date de fin réelle |
-| `budgetPlanned` | money (€) | ✗ | Budget prévisionnel |
-| `budgetSpent` | money (€) | ✗ | Budget consommé (saisie manuelle, pas de comptabilité) |
 | `archivedAt` | datetime | ✗ | Drapeau d'archivage (orthogonal au statut) |
 | `createdAt` | datetime | ✓ | |
 | `createdBy` | User | ✓ | Créateur initial |
@@ -109,7 +107,7 @@ Les voters appliquent : `visible = (visibility=public_interne OR user∈restrict
 |---|---|---|---|
 | `brouillon` | Esquisse en préparation, peu visible | ✓ | ✓ |
 | `actif` | En cours d'exécution | ✓ | ✓ |
-| `en_pause` | Suspendu temporairement (attente arbitrage, budget, partenaire) | ✓ (champs métadonnées) | ✗ (les tâches ne peuvent pas changer de statut) |
+| `en_pause` | Suspendu temporairement (attente arbitrage, partenaire, etc.) | ✓ (champs métadonnées) | ✗ (les tâches ne peuvent pas changer de statut) |
 | `termine` | Clôturé avec succès, lecture seule | Admin uniquement | ✗ |
 | `annule` | Abandonné, lecture seule | Admin uniquement | ✗ |
 

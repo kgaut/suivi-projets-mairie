@@ -92,7 +92,7 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 
 **Projets**
 
-- [ ] Entité `Project` complète selon §3.1 (reference généré, slug, title, summary, description markdown, status, visibility, restrictedToGroups, owner, coOwners, category, labels, workingGroups, dates, budget, archivedAt)
+- [ ] Entité `Project` complète selon §3.1 (reference généré, slug, title, summary, description markdown, status, visibility, restrictedToGroups, owner, coOwners, category, labels, workingGroups, dates, archivedAt)
 - [ ] Workflow Symfony pour le cycle de vie (5 statuts, transitions définies en §3.1)
 - [ ] CRUD Project (liste paginée, fiche, créer, éditer, archiver/désarchiver)
 - [ ] Filtres liste : statut, visibilité, owner, groupe de travail, category, archived ou non
