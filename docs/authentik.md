@@ -61,24 +61,61 @@ Puis dans le provider, ajouter ce scope mapping à la liste des scopes.
 | Launch URL | `https://projets.mairie.example.fr` |
 | Icon | (optionnel) logo de la mairie |
 
-### 1.4 Créer les groupes
+### 1.4 Organiser les groupes Authentik
 
-**Directory → Groups → Create**
+L'application distingue deux usages des groupes Authentik :
 
-Crée les groupes suivants (les noms sont configurables côté app) :
+1. **Groupes de "rôle applicatif"** — déterminent ce qu'un utilisateur peut **faire** dans l'app (lecture seule, agent, chef de projet, admin). Mappés via `OIDC_GROUP_ROLE_MAPPING`.
+2. **Groupes "métier"** — correspondent à l'organigramme (commissions, services, groupes-projet) et alimentent les **Groupes de travail** (cf. specs §3.11). Mappés via l'admin de l'app.
 
-- `mairie-projets-lecteur`
-- `mairie-projets-agent`
-- `mairie-projets-chef`
-- `mairie-projets-admin`
+#### Convention proposée (à adapter à votre namespace existant)
 
-Affecte tes utilisateurs aux groupes correspondants.
+**Groupes de rôle applicatif** :
 
-### 1.5 Restreindre l'accès à l'application
+- `<prefixe>-lecteur` (lecture seule)
+- `<prefixe>-agent` (création / mise à jour de tâches dans le périmètre)
+- `<prefixe>-chef` (gestion de projets)
+- `<prefixe>-admin` (administration de l'app)
+
+**Groupes métier** (exemples — utilisez les noms en place dans votre Authentik) :
+
+- `commission-numerique`
+- `commission-jeunesse`
+- `agents-services-techniques`
+- `elus-conseil-municipal`
+- ...
+
+> 💡 Le PO de la mairie utilise déjà des noms naturels du type `commission-numerique` et `agents-services-techniques`. Pas besoin de préfixe artificiel — l'application accepte n'importe quels noms de groupes existants.
+
+Crée les groupes via **Directory → Groups → Create** et affecte tes utilisateurs.
+
+### 1.5 Restreindre l'accès à l'application (filtrage SSO)
+
+Décision tranchée : **filtrage à deux niveaux** (defense in depth).
+
+#### Côté Authentik (Policy Binding)
 
 **Applications → Applications → Suivi Projets Mairie → Policy / Group / User Bindings**
 
-Lier les groupes ci-dessus à l'application avec une politique "any of" pour que **seuls** les membres de ces groupes puissent se connecter.
+Lier un (ou plusieurs) groupe(s) Authentik à l'application avec une politique "any of" pour que **seuls** leurs membres puissent se connecter. Deux options :
+
+- Option simple : lier directement les groupes de rôle applicatif (`<prefixe>-lecteur`, `<prefixe>-agent`, `<prefixe>-chef`, `<prefixe>-admin`).
+- Option "méga-groupe" : créer un groupe parent `mairie-projets-utilisateurs` qui contient tous les autres, et lier uniquement celui-là. Plus simple à maintenir si la liste évolue.
+
+Un utilisateur non membre verra une page d'erreur Authentik au login (jamais l'app).
+
+#### Côté app (variable `OIDC_REQUIRED_GROUPS`)
+
+L'application revérifie au callback OIDC qu'au moins un groupe Authentik de l'utilisateur figure dans la liste configurée. Si non, page "Accès non autorisé" + événement audit `security.access_denied`.
+
+```dotenv
+# .env (exemple)
+OIDC_REQUIRED_GROUPS=mairie-projets-utilisateurs
+# ou si tu listes explicitement les groupes autorisés
+# OIDC_REQUIRED_GROUPS=commission-numerique,agents-services-techniques,elus-conseil-municipal
+```
+
+> Cette double vérification protège contre une mauvaise configuration côté Authentik (binding oublié après création d'un nouveau groupe). Si tu ne veux qu'un seul niveau, garde Authentik (plus solide), mais l'idéal est d'avoir les deux.
 
 ## 2. Configuration côté Symfony
 
@@ -101,7 +138,12 @@ OIDC_REDIRECT_URI=https://projets.mairie.example.fr/oidc/callback
 OIDC_SCOPES="openid email profile groups"
 
 # Mapping groupes Authentik → rôles Symfony (séparateur : virgule, format : groupe:role)
+# Adapter aux groupes effectivement présents dans votre Authentik
 OIDC_GROUP_ROLE_MAPPING="mairie-projets-lecteur:ROLE_LECTEUR,mairie-projets-agent:ROLE_AGENT,mairie-projets-chef:ROLE_CHEF_PROJET,mairie-projets-admin:ROLE_ADMIN"
+
+# Filtrage d'accès à l'application (defense in depth — voir §1.5)
+# L'utilisateur doit appartenir à au moins un de ces groupes pour pouvoir se connecter
+OIDC_REQUIRED_GROUPS="mairie-projets-utilisateurs"
 ```
 
 ### 2.2 Bundle utilisé

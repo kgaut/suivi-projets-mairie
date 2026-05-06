@@ -33,7 +33,8 @@ Squelette technique opérationnel + section administration de base + infrastruct
 
 - [ ] Intégration Authentik OIDC (bundle `drenso/symfony-oidc-bundle` à confirmer)
 - [ ] Mapping groupes Authentik → rôles Symfony selon `OIDC_GROUP_ROLE_MAPPING`
-- [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`)
+- [ ] **Filtrage d'accès par méga-groupe** : variable `OIDC_REQUIRED_GROUPS` (liste séparée par virgules). Au callback OIDC, l'app vérifie qu'au moins un groupe Authentik de l'utilisateur figure dans cette liste. Sinon, rejet avec page "Accès non autorisé" claire et événement audit `security.access_denied`. Defense in depth combiné avec la Policy Binding côté Authentik
+- [ ] Entité `User` (projection locale d'Authentik : `authentikId`, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`)
 - [ ] Réconciliation utilisateur au login (création si nouveau, mise à jour sinon)
 - [ ] Page `/profile` (groupes Authentik affichés, lien vers Authentik)
 - [ ] Logout local + logout SSO côté Authentik
@@ -87,11 +88,12 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 - [ ] Workflow Symfony pour le cycle de vie (5 statuts, transitions définies en §3.1)
 - [ ] CRUD Project (liste paginée, fiche, créer, éditer, archiver/désarchiver)
 - [ ] Filtres liste : statut, visibilité, owner, groupe de travail, category, archived ou non
-- [ ] Recherche par référence (`P-2026-014`) ou texte
+- [ ] Recherche par référence (`#2026-014`) ou texte
 - [ ] Voters Project : owner / coOwner / restricted visibility
 - [ ] Transfert d'ownership (modale dédiée + audit)
 - [ ] Duplication d'un projet (copie en `brouillon` sans tâches)
-- [ ] Génération de la référence `P-YYYY-NNN` (incrémentale annuelle, séquence Postgres)
+- [ ] Génération de la référence `#YYYY-NNN` (incrémentale annuelle, séquence Postgres dédiée Project)
+- [ ] Toggle `restrictedToWorkingGroups` sur Project (visibilité réservée aux membres des groupes de travail associés, cf. specs §3.1)
 
 **Tâches**
 
@@ -104,7 +106,7 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 - [ ] Champ "motif" obligatoire pour les transitions vers `bloquee` et `annulee`
 - [ ] Cascade : annulation automatique des tâches d'un projet `annule` (uniquement si la tâche a un projet)
 - [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule` (uniquement si la tâche a un projet)
-- [ ] Génération de la référence `T-YYYY-NNNN`
+- [ ] Génération de la référence `#YYYY-NNN` (séquence Postgres dédiée Task, indépendante de celle de Project)
 - [ ] Vue "Mes tâches" (assigné = moi) avec onglets par statut
 - [ ] Voters Task : assignée à moi / créateur (autonome) / projet dont je suis owner / admin
 - [ ] Surcharge des groupes de travail au niveau de la tâche (par défaut hérités du projet quand projet présent)
@@ -167,7 +169,8 @@ Visualisation et recherche.
 - [ ] Commentaires markdown sur Project et Task
 - [ ] Champ "visible par le demandeur" sur les commentaires de Task (case à cocher, faux par défaut)
 - [ ] Mentions `@utilisateur` (autocomplete)
-- [ ] Pièces jointes (upload, prévisualisation, suppression)
+- [ ] Pièces jointes (upload, prévisualisation, suppression) — limites : **25 Mo / fichier, 10 fichiers max** par objet, types autorisés cf. specs §3.5
+- [ ] Interface `AttachmentStorage` isolée (implémentation `FileSystemStorage` en v1) pour permettre une bascule future vers une GED externe sans toucher au métier
 - [ ] Notifications in-app pour les agents (badge + dropdown)
 - [ ] Notifications e-mail aux agents (Mailer + Messenger async)
 - [ ] Préférences utilisateur (toggle e-mail / in-app)
@@ -205,12 +208,16 @@ Ouverture maîtrisée vers l'extérieur : portail de suivi pour les demandeurs (
 - [ ] Génération d'un jeton aléatoire (32 octets, base62) à la création du Requester ; stockage hashé en base
 - [ ] Route publique `/suivi/{jeton}` (rate-limited) listant les tâches du demandeur
 - [ ] Vue mobile-first (le demandeur consulte souvent depuis son téléphone)
-- [ ] Affichage des tâches : statut, dates, historique des commentaires marqués "visible par le demandeur"
-- [ ] Formulaire de commentaire depuis le portail (optionnel, pièce jointe possible avec scan + restrictions)
+- [ ] Affichage des statuts en **libellés simplifiés mappés** : Reçu / En traitement / Traité / Sans suite (mapping fixe v1)
+- [ ] Affichage des tâches : libellé statut, dates, historique des commentaires marqués "visible par le demandeur"
+- [ ] **Formulaire de commentaire** depuis le portail (rate limit : 5 commentaires max / jour / jeton)
+- [ ] **Pièces jointes du portail** : photos uniquement (jpg/png/heic/webp), 5 Mo max après compression, 3 fichiers par commentaire, scan ClamAV obligatoire, redimensionnement auto si dimension > 2048 px
+- [ ] Notification "nouveau commentaire demandeur" envoyée à l'assignée et à l'owner du projet
 - [ ] Bandeau RGPD/finalité sur la page
 - [ ] Headers `Cache-Control: no-store` sur ces routes
 - [ ] Expiration automatique du jeton 30 j après clôture de la dernière tâche
 - [ ] Révocation manuelle par un agent (régénération possible)
+- [ ] Modération a posteriori : un agent peut masquer un commentaire abusif
 - [ ] Lien d'accès au portail injecté dans tous les e-mails de notification du Lot 4
 
 **API citoyenne (préparation)**
