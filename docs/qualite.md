@@ -178,7 +178,7 @@ job audit
 
 ## 10. Monitoring d'erreurs : Sentry
 
-On branche **Sentry** dès le Lot 0 pour le suivi d'erreurs en prod. Compte Sentry SaaS existant côté mairie (instance fournie par le PO).
+On branche **Sentry** dès le Lot 0 pour le suivi d'erreurs en prod. Compte Sentry SaaS existant côté mairie ; un **projet dédié `suivi-projets-mairie`** sera créé par le PO au moment du déploiement (DSN à injecter dans le `.env` de prod, jamais committé).
 
 ### 10.1 Intégration Symfony
 
