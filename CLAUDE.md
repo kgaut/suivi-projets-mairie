@@ -54,6 +54,9 @@ Pour les sujets transverses : `docs/authentik.md` (OIDC), `docs/deploiement.md`
 
 - Pas de `git push --force` sur `main` (jamais)
 - Pas de commit de secrets (`.env` ignoré, `.env.example` à jour)
+- **Mettre à jour `CHANGELOG.md`** : ajouter une entrée sous la section
+  `## [Unreleased]` (catégorie `Added` / `Changed` / `Fixed` / etc.) qui
+  décrit la modification du point de vue utilisateur
 - Si tu modifies une décision structurante : mets à jour `docs/specifications.md`
   §8 (table des décisions) dans le **même commit**
 - Si tu modifies les conventions de workflow : `docs/workflow.md` ET ce fichier

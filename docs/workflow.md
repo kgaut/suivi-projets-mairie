@@ -109,7 +109,14 @@ Le push du tag déclenche le workflow `release.yml` qui :
 
 ### 4.2 Changelog
 
-Maintenu dans `CHANGELOG.md` (à créer au moment du premier tag), au format [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/). Mis à jour à chaque PR (section `## [Unreleased]`).
+Maintenu dans [`CHANGELOG.md`](../CHANGELOG.md) à la racine, au format [Keep a Changelog 1.1.0](https://keepachangelog.com/fr/1.1.0/).
+
+**Convention** :
+
+- À chaque PR, l'auteur ajoute (ou complète) une entrée sous `## [Unreleased]`, dans la catégorie appropriée (`Added`, `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`).
+- L'entrée doit être rédigée du point de vue utilisateur (ce que ça change pour les agents/admins/demandeurs), pas du point de vue implémentation.
+- À la création d'un tag `vX.Y.Z`, le contenu de `[Unreleased]` est déplacé dans une nouvelle section `## [X.Y.Z] - YYYY-MM-DD`. Les liens de comparaison en bas de fichier sont mis à jour. La GitHub Release reprend ce contenu dans son corps.
+- Les PR purement internes (refactor sans impact, mise à jour de dépendances mineures, lints) peuvent omettre l'entrée — au jugement.
 
 ### 4.3 Versioning
 
