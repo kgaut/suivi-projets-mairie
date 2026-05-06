@@ -156,16 +156,16 @@ Rappel des conventions globales (cf. [`docs/workflow.md`](../workflow.md)) appli
 - **CI verte obligatoire** avant merge
 - **Sentry release tracking** activé dès qu'on a la première PR mergée
 
-## 5. Questions ouvertes spécifiques au Lot 0
+## 5. Décisions techniques tranchées (validées par le PO)
 
-| # | Question | Recommandation par défaut |
+| # | Sujet | Décision |
 |---|---|---|
-| 1 | Build front : AssetMapper (Symfony natif, sans Node) ou Webpack Encore ? | **AssetMapper** (plus simple, pas de Node en build, parfait pour Tailwind via le plugin officiel) |
-| 2 | Bundle OIDC : `drenso/symfony-oidc-bundle` confirmé ou alternatives évaluées (`KnpUOAuth2ClientBundle` + custom) ? | **drenso/symfony-oidc-bundle** par défaut. Bascule sur KnpU si on rencontre une limitation (logout SSO complexe par exemple) |
-| 3 | Mode "stub" `OIDC_DRIVER=fake` pour le dev sans Authentik ? | À implémenter **uniquement si demandé** par toi en cours de lot. Sinon, on configure un provider dev sur ton Authentik existant |
-| 4 | Format de cron pour les jobs Messenger en prod : un seul service worker ou plusieurs ? | Un seul `worker` en v1, on scalera plus tard si besoin |
-| 5 | Nom de l'application dans Sentry : `spm` ou `suivi-projets-mairie` ? | `spm` (cohérent avec le reste — DB, Caddy, etc.) |
-| 6 | Mailpit : exposé sur `mailpit.spm.localhost` (HTTPS via Caddy) ou `localhost:8025` (HTTP direct) ? | **`localhost:8025`** : plus simple, pas besoin de TLS sur Mailpit |
+| 1 | Build front | **AssetMapper** (Symfony natif, pas de Node en build, parfait pour Tailwind via le plugin officiel) |
+| 2 | Bundle OIDC | **`drenso/symfony-oidc-bundle`**. Fallback prévu sur `KnpUOAuth2ClientBundle` + custom resource owner si on rencontre une limitation (logout SSO complexe par exemple) |
+| 3 | Mode stub `OIDC_DRIVER=fake` | **Non en v1**. Configurer un provider dev sur l'Authentik existant. Reconsidérer si demande explicite |
+| 4 | Worker Messenger | **Un seul service `worker`** en v1. Scaler plus tard si besoin |
+| 5 | Nom de l'application dans Sentry | **`spm`** (cohérent avec la nomenclature du reste — DB, Caddy, etc.) |
+| 6 | Exposition Mailpit | **`http://localhost:8025`** (HTTP direct, pas de TLS). Pas de domaine HTTPS pour Mailpit |
 
 ## 6. Plan d'attaque côté issues
 
