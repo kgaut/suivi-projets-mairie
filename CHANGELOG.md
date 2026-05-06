@@ -41,6 +41,10 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - Page d'accueil refondue avec Tailwind + démos Stimulus et Live Component côté à côté
 - Layout Twig responsive mobile-first : `templates/_partials/_header.html.twig` (logo, burger menu CSS-only ≥ 1024 px), `_nav.html.twig`, `_footer.html.twig`. Skip link "Aller au contenu" pour l'accessibilité (RGAA), structure HTML5 sémantique (`<header>`, `<main>`, `<footer>`, `<nav>` avec `aria-label`), `lang="fr"`, `theme-color`. Burger en `<input type="checkbox" class="peer">` + `peer-checked:flex` Tailwind (pas de JS, accessible via label associé)
 
+### Fixed
+
+- `templates/home/index.html.twig` : marqueurs de conflit git non résolus (`<<<<<<<`, `=======`, `>>>>>>>`) laissés par le merge auto de la PR #17 sur le main contenant déjà la PR #16. Contenu consolidé : démos Stimulus + Live Component (apport #16) sans le `<main>` (qui vient désormais du layout via `base.html.twig`, apport #17)
+
 ### Changed
 
 - `.editorconfig` enrichi : règles dédiées YAML/JSON/Twig/JS/CSS (2 espaces), Markdown (2 espaces, trailing whitespace conservé), Makefile (tabulations exigées par make)
