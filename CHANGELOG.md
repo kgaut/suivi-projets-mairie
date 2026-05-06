@@ -29,6 +29,7 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 - Confs PHP par stage : `docker/php/conf.d/zz-app.ini` (partagée), `docker/php/conf.d-dev/zz-dev.ini` (validate_timestamps + Xdebug optionnel), `docker/php/conf.d-prod/zz-prod.ini` (preload + opcache figé)
 - `docker-compose.dev.yml` (renommé depuis `docker-compose.dev.yml.example`) — FrankenPHP en HTTPS sur `spm.localhost` (CA Caddy persistée), Postgres 16, Redis 7, Mailpit ; vars d'env `DATABASE_URL`/`REDIS_URL`/`MAILER_DSN` pré-câblées
 - `.dockerignore` pour garder les builds rapides et l'image prod légère
+- `Makefile` à la racine qui wrappe les commandes Docker, Symfony et qualité ; `make help` affiche les cibles regroupées par section (Démarrage, Installation, Développement, Tests, Qualité). Cibles destructrices (`clean`, `reset`) demandent une confirmation interactive ; cibles de qualité (`stan`, `cs`, `rector`, etc.) sont déclarées même si les outils ne sont pas encore installés (l'erreur sera explicite à l'appel)
 
 ## [0.0.1] - 2026-05-06
 
