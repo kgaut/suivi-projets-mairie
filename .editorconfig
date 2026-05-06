@@ -2,6 +2,7 @@
 
 root = true
 
+# Défaut : PHP, code en général — 4 espaces, LF, UTF-8, newline finale
 [*]
 charset = utf-8
 end_of_line = lf
@@ -10,8 +11,23 @@ indent_style = space
 insert_final_newline = true
 trim_trailing_whitespace = true
 
-[{compose.yaml,compose.*.yaml}]
+# Configuration / web — 2 espaces (convention)
+[*.{yml,yaml,json,jsonc,toml,xml,xliff}]
 indent_size = 2
 
+# Front (Twig, JS, CSS) — 2 espaces
+[*.{twig,html.twig,js,mjs,ts,css,scss,vue}]
+indent_size = 2
+
+# Markdown — 2 espaces ; trailing whitespace conservé pour la syntaxe deux-espaces-fin-de-ligne
 [*.md]
+indent_size = 2
 trim_trailing_whitespace = false
+
+# Makefile — tabulations EXIGÉES par make (sinon syntax error)
+[{Makefile,*.mk,GNUmakefile}]
+indent_style = tab
+
+# Go (au cas où) — tabulations standard
+[*.go]
+indent_style = tab
