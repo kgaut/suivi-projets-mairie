@@ -17,6 +17,11 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ## [Unreleased]
 
+### Added
+
+- Cadrage opérationnel détaillé du Lot 0 (`docs/lots/lot-0-cadrage.md`) — découpage en 4 vagues (squelette technique, OIDC, administration, audit/qualité/CI), 6 décisions techniques validées (AssetMapper, drenso/symfony-oidc-bundle, pas de mode stub OIDC, un seul worker Messenger, nom Sentry `spm`, Mailpit en HTTP direct), plan d'attaque côté issues
+- Pointer vers ce cadrage depuis `docs/roadmap.md` (Lot 0 marqué `🚧 en cours`)
+
 ## [0.0.1] - 2026-05-06
 
 Cadrage initial du projet — pas de code applicatif, uniquement les documents de référence.
