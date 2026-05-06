@@ -6,6 +6,7 @@ namespace App\Domain;
 
 use App\Domain\Enum\AvatarSource;
 use App\Infrastructure\Repository\UserRepository;
+use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
 use Symfony\Component\Security\Core\User\UserInterface;
@@ -24,28 +25,13 @@ use Symfony\Component\Uid\Uuid;
  */
 #[ORM\Entity(repositoryClass: UserRepository::class)]
 #[ORM\Table(name: 'users')]
-#[ORM\Index(columns: ['email'], name: 'idx_users_email')]
+#[ORM\Index(name: 'idx_users_email', columns: ['email'])]
 #[ORM\UniqueConstraint(name: 'uq_users_authentik_id', columns: ['authentik_id'])]
 class User implements UserInterface
 {
     #[ORM\Id]
     #[ORM\Column(type: 'uuid', unique: true)]
     private Uuid $id;
-
-    /**
-     * `sub` du token OIDC Authentik. Clé de réconciliation, immuable.
-     */
-    #[ORM\Column(type: Types::STRING, length: 64)]
-    private string $authentikId;
-
-    #[ORM\Column(type: Types::STRING, length: 128)]
-    private string $username;
-
-    #[ORM\Column(type: Types::STRING, length: 255)]
-    private string $email;
-
-    #[ORM\Column(type: Types::STRING, length: 255)]
-    private string $displayName;
 
     /**
      * Rôles applicatifs résolus au login. Contient toujours `ROLE_USER`.
@@ -68,7 +54,7 @@ class User implements UserInterface
     private array $groupsSnapshot = [];
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $lastLoginAt = null;
+    private ?DateTimeImmutable $lastLoginAt = null;
 
     /**
      * Détecté désactivé côté Authentik (compte supprimé, refus du filtrage
@@ -76,7 +62,7 @@ class User implements UserInterface
      * l'historique des contributions.
      */
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $disabledAt = null;
+    private ?DateTimeImmutable $disabledAt = null;
 
     // -- Avatars (cf. specs §3.8 sous-section Avatar) ------------------------
 
@@ -106,7 +92,7 @@ class User implements UserInterface
      * avant nouveau fetch (cf. specs §3.8).
      */
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE, nullable: true)]
-    private ?\DateTimeImmutable $authentikAvatarFetchedAt = null;
+    private ?DateTimeImmutable $authentikAvatarFetchedAt = null;
 
     #[ORM\Column(type: Types::STRING, length: 16, enumType: AvatarSource::class)]
     private AvatarSource $avatarSource = AvatarSource::AUTO;
@@ -121,23 +107,26 @@ class User implements UserInterface
     // -- Audit timestamps ----------------------------------------------------
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
-    private \DateTimeImmutable $createdAt;
+    private DateTimeImmutable $createdAt;
 
     #[ORM\Column(type: Types::DATETIME_IMMUTABLE)]
-    private \DateTimeImmutable $updatedAt;
+    private DateTimeImmutable $updatedAt;
 
     public function __construct(
-        string $authentikId,
-        string $username,
-        string $email,
-        string $displayName,
+        /**
+         * `sub` du token OIDC Authentik. Clé de réconciliation, immuable.
+         */
+        #[ORM\Column(type: Types::STRING, length: 64)]
+        private string $authentikId,
+        #[ORM\Column(type: Types::STRING, length: 128)]
+        private string $username,
+        #[ORM\Column(type: Types::STRING, length: 255)]
+        private string $email,
+        #[ORM\Column(type: Types::STRING, length: 255)]
+        private string $displayName,
     ) {
         $this->id = Uuid::v7();
-        $this->authentikId = $authentikId;
-        $this->username = $username;
-        $this->email = $email;
-        $this->displayName = $displayName;
-        $this->createdAt = new \DateTimeImmutable();
+        $this->createdAt = new DateTimeImmutable();
         $this->updatedAt = $this->createdAt;
     }
 
@@ -221,31 +210,31 @@ class User implements UserInterface
         $this->touch();
     }
 
-    public function getLastLoginAt(): ?\DateTimeImmutable
+    public function getLastLoginAt(): ?DateTimeImmutable
     {
         return $this->lastLoginAt;
     }
 
-    public function recordLogin(?\DateTimeImmutable $at = null): void
+    public function recordLogin(?DateTimeImmutable $at = null): void
     {
-        $this->lastLoginAt = $at ?? new \DateTimeImmutable();
+        $this->lastLoginAt = $at ?? new DateTimeImmutable();
         $this->touch();
     }
 
-    public function getDisabledAt(): ?\DateTimeImmutable
+    public function getDisabledAt(): ?DateTimeImmutable
     {
         return $this->disabledAt;
     }
 
-    public function disable(?\DateTimeImmutable $at = null): void
+    public function disable(?DateTimeImmutable $at = null): void
     {
-        $this->disabledAt = $at ?? new \DateTimeImmutable();
+        $this->disabledAt = $at ?? new DateTimeImmutable();
         $this->touch();
     }
 
     public function isDisabled(): bool
     {
-        return $this->disabledAt !== null;
+        return $this->disabledAt instanceof DateTimeImmutable;
     }
 
     public function getAvatarPath(): ?string
@@ -269,12 +258,12 @@ class User implements UserInterface
         return $this->authentikAvatarPath;
     }
 
-    public function getAuthentikAvatarFetchedAt(): ?\DateTimeImmutable
+    public function getAuthentikAvatarFetchedAt(): ?DateTimeImmutable
     {
         return $this->authentikAvatarFetchedAt;
     }
 
-    public function setAuthentikAvatar(string $sourceUrl, string $path, \DateTimeImmutable $fetchedAt): void
+    public function setAuthentikAvatar(string $sourceUrl, string $path, DateTimeImmutable $fetchedAt): void
     {
         $this->authentikAvatarSourceUrl = $sourceUrl;
         $this->authentikAvatarPath = $path;
@@ -312,12 +301,12 @@ class User implements UserInterface
         $this->touch();
     }
 
-    public function getCreatedAt(): \DateTimeImmutable
+    public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
 
-    public function getUpdatedAt(): \DateTimeImmutable
+    public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
     }
@@ -326,9 +315,13 @@ class User implements UserInterface
      * Identifiant retourné à Symfony Security. On utilise `authentikId` (clé
      * stable, immuable) plutôt que l'email ou le username qui peuvent évoluer
      * côté Authentik.
+     *
+     * @return non-empty-string
      */
     public function getUserIdentifier(): string
     {
+        \assert('' !== $this->authentikId, 'authentikId must never be empty');
+
         return $this->authentikId;
     }
 
@@ -339,6 +332,6 @@ class User implements UserInterface
 
     private function touch(): void
     {
-        $this->updatedAt = new \DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable();
     }
 }

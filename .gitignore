@@ -32,3 +32,20 @@
 /phpunit.xml
 /.phpunit.cache/
 ###< phpunit/phpunit ###
+
+###> friendsofphp/php-cs-fixer ###
+/.php-cs-fixer.php
+/.php-cs-fixer.cache
+###< friendsofphp/php-cs-fixer ###
+
+###> deptrac ###
+/.deptrac.cache
+###< deptrac ###
+
+###> rector ###
+/.rector.cache
+###< rector ###
+
+###> twig-cs-fixer ###
+/.twig-cs-fixer.cache
+###< twig-cs-fixer ###

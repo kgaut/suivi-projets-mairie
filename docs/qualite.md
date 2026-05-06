@@ -22,15 +22,27 @@ L'objectif n'est pas d'empiler les outils mais d'avoir un filet de sécurité fi
 
 ## 2. Configuration
 
-Chaque outil aura son fichier de config à la racine du repo (créés au Lot 0) :
+Tous les fichiers de config vivent à la racine du repo (livrés au Lot 0
+Vague 4) :
 
-- `phpstan.neon.dist` (level 9 / max + extensions Symfony et Doctrine)
+- `phpstan.neon.dist` (level 9, extensions Symfony / Doctrine / PHPUnit
+  enregistrées automatiquement par `phpstan/extension-installer`)
 - `phpunit.dist.xml`
-- `.php-cs-fixer.dist.php` (preset `@Symfony` + `@PHP84Migration` + règles maison)
-- `.twig-cs-fixer.dist.php`
-- `rector.php` (sets : Symfony, Doctrine, PHP 8.4)
-- `deptrac.yaml` (couches : Controller / Application / Domain / Infrastructure)
+- `.php-cs-fixer.dist.php` — preset `@Symfony` + `@Symfony:risky` + `@PSR12`
+  + `@PHP84Migration` + `@PHPUnit100Migration:risky`. `yoda_style` désactivé
+  volontairement (lecture plus naturelle pour l'équipe).
+- `.twig-cs-fixer.dist.php` — standards `TwigCsFixer` + `Symfony`
+- `rector.php` — `withPhpSets(php84: true)` + `withComposerBased(symfony,
+  doctrine, phpunit)` (auto-détection des versions depuis composer.json) +
+  `withPreparedSets(deadCode, codeQuality, codingStyle, typeDeclarations,
+  privatization, earlyReturn, instanceOf)`. Mode dry-run en CI, mode `process`
+  pour appliquer en local.
+- `deptrac.yaml` — couches `Controller / Application / Domain / Infrastructure
+  / Security / Twig / DataFixtures / Vendor` avec une exception documentée
+  (`skip_violations`) pour `App\Domain\User → App\Infrastructure\Repository\UserRepository`
+  qui correspond à l'attribut `#[ORM\Entity(repositoryClass)]`.
 - `.editorconfig`
+- `grumphp.yml` (cf. §6)
 
 ## 3. Règles d'architecture (Deptrac)
 
