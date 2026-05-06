@@ -80,16 +80,15 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 
 **Groupes de travail** (à faire en premier — Project/Task en dépendent)
 
-- [ ] Entité `AuthentikGroup` (cache local des groupes Authentik) + entité `WorkingGroup` (slug, name, description, color, icon, authentikGroup FK, position, archivedAt) + migrations + fixtures
-- [ ] **Service de synchro Authentik** : `AuthentikGroupSynchronizer` qui appelle l'API admin Authentik (scope `read:group`), met à jour la table `authentik_groups`, marque les disparus avec `vanishedAt`. Cron horaire + bouton manuel "Actualiser" dans l'admin
-- [ ] Écran admin "Groupes Authentik" : liste paginée avec checkbox **`Visible`** par ligne (défaut décoché), boutons "Créer un groupe de travail" / "Modifier le mapping"
-- [ ] CRUD WorkingGroup en admin (liste, fiche, créer, éditer, archiver) — la sélection du groupe Authentik se fait depuis la liste des `AuthentikGroup` `visible`, plus de saisie libre
-- [ ] Calcul des groupes de travail de l'utilisateur au login (jointure `authentik_groups.authentikId ∈ user.authentikGroups`), mis en cache Redis
-- [ ] Méthode `User::getWorkingGroups()` exposée à Twig
-- [ ] Page de liste publique des groupes de travail actifs `/groupes-de-travail`
+- [ ] Entité `WorkingGroup` (authentikName unique, label, slug, description, color, icon, visible, position, firstSeenAt, lastSeenAt, archivedAt) + migration + fixtures
+- [ ] **Subscriber de login** : à chaque connexion OIDC, parcours du claim `groups`, création des `WorkingGroup` manquants (`visible=false`, `label` humanisé depuis `authentikName`), mise à jour de `lastSeenAt` pour les existants
+- [ ] Écran admin `/admin/groupes-de-travail` : liste avec colonnes nom machine (read-only), label (éditable), nombre de membres (calculé à la volée via `groupsSnapshot`), visibilité (toggle direct), première/dernière connexion observée. Filtres : visibles uniquement, archivés, recherche
+- [ ] Action admin "Modifier" : édite `label`, `description`, `color`, `icon`, `visible`, `position`, `archivedAt` (le nom machine reste figé côté Authentik)
+- [ ] Méthode `User::getWorkingGroups()` exposée à Twig (résolution `authentikName ∈ User.groupsSnapshot AND visible=true AND archivedAt IS NULL`), mise en cache Redis avec TTL aligné session
+- [ ] Page de liste publique des groupes de travail actifs `/groupes-de-travail` (uniquement les `visible=true`)
 - [ ] Vue détaillée `/groupes-de-travail/<slug>` (sera enrichie avec projets/tâches une fois Project/Task disponibles)
-- [ ] Indicateur "mapping orphelin" si l'`AuthentikGroup` lié est marqué `vanishedAt`
-- [ ] Avertissement admin si plusieurs WorkingGroup pointent vers le même `AuthentikGroup`
+- [ ] Indicateur "potentiellement dissous" dans l'admin si `lastSeenAt > 90 jours`
+- [ ] Sélecteurs Project/Task : ne proposent que les groupes `visible=true AND archivedAt IS NULL`. Affichage grisé si un groupe associé devient invisible/archivé après coup
 - [ ] **Voters Project / Task** qui calculent à la volée `ROLE_CHEF_PROJET` (owner/coOwner/createdBy), `ROLE_ACTEUR` (membre d'un WG associé), `ROLE_LECTEUR` (sinon, si visible)
 
 **Projets**

@@ -585,61 +585,89 @@ Permet au demandeur, sans compte ni mot de passe, de consulter et **commenter** 
 
 ### 3.11 Groupe de travail (WorkingGroup)
 
-Un **groupe de travail** est une instance organisationnelle de la mairie qui peut piloter ou être impliquée dans des projets et tâches : commission thématique (jeunesse, urbanisme, finances), service municipal (services techniques, état civil), groupe-projet ad hoc, etc. Le terme "groupe de travail" est volontairement générique pour rester évolutif.
+Un **groupe de travail** est la projection locale d'un groupe Authentik dans l'application. C'est l'entité pivot du modèle de droits : l'appartenance à un groupe de travail (issue du claim OIDC `groups` au login) conditionne le calcul du rôle `ROLE_ACTEUR` sur les Project / Task associés (cf. §2).
 
-Un `WorkingGroup` est **adossé à un groupe Authentik unique** (relation 1-1) : un utilisateur appartient au groupe de travail si son groupe Authentik mappé figure dans ses groupes Authentik au login. **Aucune gestion de membres dans l'app** — Authentik reste la source de vérité.
+#### Population automatique au login
 
-> 💡 L'appartenance à un groupe de travail conditionne le calcul du rôle `ROLE_ACTEUR` sur les Project / Task associés (cf. §2). C'est donc le pivot du modèle de droits.
+L'application **ne dépend pas de l'API admin Authentik**. La table `working_groups` se peuple toute seule au fil des connexions :
 
-#### Découverte des groupes Authentik côté admin
+1. Au callback OIDC, l'app lit le claim `groups` du token (liste de noms de groupes Authentik).
+2. Pour chaque nom de groupe :
+   - S'il n'existe **pas** encore en base → création d'une nouvelle ligne `WorkingGroup` avec `visible=false` (défaut), `label` initialisé à partir du nom machine (humanisation simple : `commission-numerique` → "Commission Numerique"), `firstSeenAt = now()`.
+   - S'il existe déjà → `lastSeenAt = now()`.
+3. La liste des groupes de travail visibles dans les sélecteurs Project/Task est filtrée sur `visible=true AND archivedAt IS NULL`. Les groupes nouvellement créés sont donc invisibles tant que l'admin ne les active pas explicitement.
 
-Pour faciliter le mapping et éviter la saisie texte libre source d'erreurs, l'application **synchronise** la liste des groupes Authentik via l'API admin Authentik (lecture seule, scope `read:group`).
-
-- À intervalle régulier (cron horaire ou bouton manuel "Actualiser"), l'app récupère la liste des groupes Authentik visibles et la stocke dans une table `authentik_groups` (cache local).
-- Dans l'admin, l'écran "Groupes de travail" affiche cette liste avec, pour chacun :
-  - Le nom du groupe Authentik
-  - Une **case à cocher "Visible"** : par défaut décochée, à cocher pour les groupes pertinents pour l'application. Les groupes décochés sont **masqués** des sélecteurs/filtres et ne peuvent pas être mappés à un `WorkingGroup`.
-  - Si visible : un bouton "Créer un groupe de travail" (ou "Modifier le groupe de travail mappé") qui pré-remplit le formulaire.
-- Cas d'usage : la mairie a typiquement 50+ groupes Authentik (RH, technique, élus, comptabilité, accès VPN…) dont seuls 5-10 sont pertinents pour cet outil. Le toggle "Visible" évite de polluer l'UI.
+> 💡 Conséquence : tant que personne ayant le groupe X dans Authentik ne s'est connecté à l'app, le groupe X n'existe pas dans l'app. C'est volontaire — on évite de polluer la base avec des groupes "fantômes".
 
 #### Attributs
 
-##### Entité `WorkingGroup`
-
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | |
-| `slug` | string (64) | ✓ | Pour URLs / filtres, ex. `jeunesse`, `urbanisme`, `services-techniques` |
-| `name` | string (128) | ✓ | Libellé affiché, ex. "Commission Jeunesse", "Services Techniques" |
-| `description` | text | ✗ | Présentation, périmètre, missions |
-| `color` | string (hex) | ✗ | Pour affichage (badges colorés en liste) |
-| `icon` | string | ✗ | Emoji ou nom d'icône |
-| `authentikGroup` | AuthentikGroup | ✓ | Référence vers l'entité miroir (cf. ci-dessous), une relation M2O. Un groupe Authentik peut avoir 0 ou 1 WorkingGroup |
-| `position` | int | ✓ | Ordre d'affichage |
-| `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'un groupe dissous |
-| `createdAt` / `createdBy` / `updatedAt` / `updatedBy` | | ✓ | |
+| `authentikName` | string (255) | ✓ | Nom machine du groupe côté Authentik (clé de réconciliation, unique). Read-only côté admin |
+| `label` | string (128) | ✓ | Libellé affiché ("Commission Numérique"). Initialisé à la création par humanisation de `authentikName`, **éditable par l'admin** |
+| `slug` | string (64) | ✓ | Slug pour URLs / filtres, généré à partir de `label` (regénérable si `label` change) |
+| `description` | text | ✗ | Présentation, périmètre, missions. Éditable par l'admin |
+| `color` | string (hex) | ✗ | Pour les badges. Éditable par l'admin |
+| `icon` | string | ✗ | Emoji ou nom d'icône. Éditable par l'admin |
+| `visible` | bool | ✓ | Toggle "Visible dans les sélecteurs Project/Task". Défaut `false`. Éditable par l'admin |
+| `position` | int | ✓ | Ordre d'affichage (parmi les visibles). Défaut `0` |
+| `firstSeenAt` | datetime | ✓ | Premier login observé contenant ce groupe |
+| `lastSeenAt` | datetime | ✓ | Dernier login observé contenant ce groupe |
+| `archivedAt` | datetime | ✗ | Pour ne pas perdre l'historique d'un groupe dissous (masque automatiquement des sélecteurs) |
+| `createdAt` / `updatedAt` | datetime | ✓ | |
+| `updatedBy` | User | ✗ | Dernier admin ayant édité le groupe (null si seule la création auto a eu lieu) |
 
-##### Entité miroir `AuthentikGroup`
+> Pas de `createdBy` : la ligne est créée automatiquement par le subscriber de login, pas par un utilisateur identifié.
 
-Cache local des groupes Authentik récupérés via l'API. Source : Authentik. Reconstruit à chaque synchro.
+#### Calcul du nombre de membres
 
-| Attribut | Type | Obligatoire | Description |
-|---|---|---|---|
-| `id` | UUID v7 | ✓ | |
-| `authentikId` | string (64) | ✓ | UUID/PK du groupe côté Authentik (clé de réconciliation) |
-| `name` | string (255) | ✓ | Nom du groupe Authentik, peut évoluer côté Authentik |
-| `visible` | bool | ✓ | Toggle "Visible dans l'app" (défaut `false`) — décide si le groupe est proposé pour mapping ou non |
-| `lastSyncedAt` | datetime | ✓ | Dernière synchro réussie |
-| `vanishedAt` | datetime | ✗ | Si lors d'une synchro le groupe n'apparaît plus côté Authentik (suppression) |
+Le nombre de membres d'un groupe de travail s'obtient en interrogeant la projection locale des utilisateurs : `User.groupsSnapshot` (le claim `groups` capté au dernier login) contient le nom du groupe.
 
-> Cette entité reste **passive** : aucun écran de CRUD direct dessus, juste une liste avec checkbox `visible` et indicateurs (date de découverte, "vanished").
+```sql
+SELECT COUNT(*) FROM users WHERE :authentikName = ANY(groupsSnapshot) AND disabledAt IS NULL
+```
 
-#### Mapping vers le groupe Authentik
+Calculé à la volée (pas de cache) sur l'écran admin. Limite assumée : un utilisateur qui n'a jamais connecté l'app n'est pas compté, et un changement d'appartenance côté Authentik n'est répercuté qu'au prochain login.
 
-- Un `WorkingGroup` est obligatoirement lié à un `AuthentikGroup` `visible`. Plus de saisie texte libre.
-- L'admin peut changer le groupe Authentik mappé à tout moment ; les permissions des utilisateurs déjà connectés se mettent à jour à leur prochain login (ou via une commande de réconciliation manuelle).
-- Plusieurs `WorkingGroup` **peuvent** pointer vers le même `AuthentikGroup` (ex. plusieurs entités liées au même groupe "élus") — autorisé mais signalé en avertissement dans l'admin.
-- Si un `AuthentikGroup` est marqué `vanishedAt` (supprimé côté Authentik), les `WorkingGroup` qui le référencent affichent un avertissement (mapping orphelin) et l'appartenance auto cesse de fonctionner.
+#### Écran d'administration
+
+`/admin/groupes-de-travail` (réservé à `ROLE_ADMIN`) :
+
+| Colonne | Source | Modifiable |
+|---|---|---|
+| **Nom machine** | `authentikName` | ✗ (côté Authentik uniquement) |
+| **Label** | `label` | ✓ |
+| **Membres** | calculé `COUNT(users WHERE …)` | ✗ |
+| **Visible** | `visible` | ✓ (toggle direct) |
+| **Première / dernière connexion observée** | `firstSeenAt` / `lastSeenAt` | ✗ |
+| **Action** | bouton "Modifier" | → édite `label`, `description`, `color`, `icon`, `visible`, `position`, `archivedAt` |
+
+Tri par défaut : `lastSeenAt DESC` (les groupes actifs remontent). Filtres : `visible only`, `archived`, recherche par `authentikName` ou `label`.
+
+#### Liens avec Project et Task
+
+- **Project** : relation many-to-many `Project ↔ WorkingGroup`. Un projet peut être co-piloté par plusieurs groupes de travail (ex. un projet de skate-park concerne Jeunesse + Services Techniques). Champ optionnel.
+- **Task** : relation many-to-many `Task ↔ WorkingGroup`. À la création d'une tâche, les groupes de travail du projet parent sont **hérités par défaut** mais l'utilisateur peut les modifier.
+- **Sélecteurs** : seuls les groupes `visible=true AND archivedAt IS NULL` sont proposés à la sélection. Si un projet a un groupe qui devient ensuite invisible/archivé, l'association reste persistée mais le groupe est affiché en grisé.
+
+#### Filtrage et navigation
+
+- Filtre "mon/mes groupe(s) de travail" sur les listes Projects et Tasks (pré-coché si l'utilisateur n'appartient qu'à un seul).
+- Vue dédiée par groupe : `/groupes-de-travail/<slug>` listant projets + tâches en cours, avec indicateurs (nb projets actifs, tâches en retard…). Accessible uniquement pour les groupes `visible`.
+- Affichage des badges sur les fiches Project et Task (couleur + label).
+
+#### Droits
+
+- Voir la liste des groupes de travail visibles : tous les utilisateurs.
+- Voir l'écran d'admin (tous les groupes y compris non visibles), basculer la visibilité, éditer label/description/icon/color/position, archiver : `ROLE_ADMIN` uniquement.
+- Supprimer un groupe : **interdit** (un groupe Authentik existe ou non, on ne peut pas le supprimer côté app sans casser la réconciliation au prochain login). Utiliser l'archivage.
+
+#### Cas particuliers à anticiper
+
+- **Groupe disparu côté Authentik** : si un groupe n'a pas été observé depuis longtemps (ex. > 90 jours), un indicateur "potentiellement dissous" apparaît dans l'admin. L'admin peut alors archiver. La ligne reste pour préserver l'historique des associations Project/Task passées.
+- **Renommage côté Authentik** : si le nom machine change côté Authentik, l'app crée une nouvelle ligne `WorkingGroup` (l'ancienne tombe en désuétude — pas vue récemment). Pas de réconciliation auto. À documenter : renommer un groupe Authentik = recréer le mapping côté app et migrer les associations à la main.
+- **Plusieurs apps mariant les mêmes groupes** : aucun impact, on lit juste le claim `groups`. Les groupes que cette app marque comme `visible` ne le sont qu'à l'échelle de **cette** instance.
 
 #### Calcul de l'appartenance
 
@@ -909,7 +937,7 @@ Toutes les questions ouvertes initiales ont été tranchées avec le PO. Les dé
 | 12 | Revue obligatoire avant clôture | **Non** : l'assignée peut auto-valider sa propre revue. Mode "double validation" prévu en évolution future (paramètre par projet) |
 | 13 | Estimation d'effort | **T-shirt sizing** (XS / S / M / L / XL) |
 | 14 | Format de référence | **`#P-YYYY-NNN`** pour les projets, **`#T-YYYY-NNN`** pour les tâches. Compteurs **séparés** : séquences Postgres `project_reference_seq_<year>` et `task_reference_seq_<year>`. Le préfixe `P-`/`T-` lève l'ambiguïté lors du parsing des références croisées dans les textes (§3.13). Slug optionnel en suffixe pour la lisibilité (`#P-2026-014-refonte-site`), non vérifié à la résolution |
-| 15 | Mapping groupe de travail ↔ Authentik | **Synchro API Authentik dès le Lot 1** : entité miroir `AuthentikGroup` (cache local), checkbox "Visible dans l'app" par groupe, sélection depuis liste filtrée plutôt que saisie texte libre (révision de la décision initiale, motivée par le commentaire PO sur les nombreux groupes Authentik non pertinents) |
+| 15 | Découverte des groupes de travail | **Population automatique au login** : à chaque connexion OIDC, les nouveaux groupes du claim `groups` créent une ligne `WorkingGroup` avec `visible=false`. L'admin active la visibilité au cas par cas dans l'admin. Pas de dépendance API admin Authentik (révision : les entités `AuthentikGroup` + `WorkingGroup` séparées sont fusionnées en une seule, cf. §3.11) |
 | 16 | Visibilité par groupe de travail | **Hybride** : par défaut organisationnel uniquement, mais toggle `restrictedToWorkingGroups` sur Project pour réserver la visibilité aux membres des groupes de travail associés |
 | Bonus | Filtrage d'accès à l'application | **Côté Authentik (Policy Binding) + côté app (`OIDC_REQUIRED_GROUPS`)** — defense in depth |
 

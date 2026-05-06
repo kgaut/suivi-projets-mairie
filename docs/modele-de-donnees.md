@@ -298,40 +298,30 @@ Spec : `docs/specifications.md` §3.10.
 
 ### 3.11 WorkingGroup — `working_groups`
 
-Spec : `docs/specifications.md` §3.11.
+Spec : `docs/specifications.md` §3.11. Entité **auto-populée au login OIDC** (claim `groups`). Une ligne par groupe Authentik observé. L'admin active la visibilité au cas par cas.
 
 | Champ | Type PHP | Type SQL | N | Notes |
 |---|---|---|---|---|
 | `id` | `Uuid` | `uuid` | ✗ | PK |
-| `slug` | `string` | `varchar(64)` | ✗ | Unique |
-| `name` | `string` | `varchar(128)` | ✗ | |
+| `authentikName` | `string` | `varchar(255)` | ✗ | Unique, nom machine côté Authentik (clé de réconciliation, read-only) |
+| `label` | `string` | `varchar(128)` | ✗ | Libellé affiché. Initialisé à création par humanisation de `authentikName`, éditable |
+| `slug` | `string` | `varchar(64)` | ✗ | Unique, généré depuis `label` |
 | `description` | `?string` | `text` | ✓ | |
 | `color` | `?string` | `varchar(7)` | ✓ | Hex `#RRGGBB` |
 | `icon` | `?string` | `varchar(64)` | ✓ | Emoji ou nom d'icône |
-| `authentikGroup` | `AuthentikGroup` | FK `uuid` | ✗ | M2O vers `AuthentikGroup` (cf. §3.12) — un WG est obligatoirement adossé à un groupe Authentik visible |
-| `position` | `int` | `integer` | ✗ | Ordre d'affichage |
-| `archivedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | |
+| `visible` | `bool` | `boolean` | ✗ | Défaut `false`. Toggle d'apparition dans les sélecteurs Project/Task |
+| `position` | `int` | `integer` | ✗ | Ordre d'affichage parmi les visibles |
+| `firstSeenAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | Premier login observé contenant ce groupe |
+| `lastSeenAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | Dernier login observé (mis à jour à chaque login d'un membre) |
+| `archivedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | Pour ne pas perdre l'historique |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
-| `createdBy` / `updatedBy` | `User` | FK `uuid` | ✗ | |
+| `updatedBy` | `?User` | FK `uuid` | ✓ | Dernier admin éditeur (null si seule la création auto a eu lieu) |
 
-**Index** : `slug` (unique), `authentik_group_id`.
+**Index** : `authentikName` (unique), `slug` (unique), `(visible, archivedAt)` pour les sélecteurs, `lastSeenAt DESC` pour le tri admin.
 
-### 3.12 AuthentikGroup — `authentik_groups`
+> Le **nombre de membres** n'est pas stocké : calculé à la volée par `SELECT COUNT(*) FROM users WHERE :authentikName = ANY(groupsSnapshot) AND disabledAt IS NULL`.
 
-Cache local des groupes Authentik récupérés via l'API admin. Spec : `docs/specifications.md` §3.11 (sous-section "Découverte des groupes Authentik côté admin").
-
-| Champ | Type PHP | Type SQL | N | Notes |
-|---|---|---|---|---|
-| `id` | `Uuid` | `uuid` | ✗ | PK locale |
-| `authentikId` | `string` | `varchar(64)` | ✗ | Unique, UUID/PK côté Authentik (clé de réconciliation) |
-| `name` | `string` | `varchar(255)` | ✗ | Nom courant côté Authentik (peut évoluer) |
-| `visible` | `bool` | `boolean` | ✗ | Toggle "Visible dans l'app" — défaut `false` |
-| `lastSyncedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
-| `vanishedAt` | `?\DateTimeImmutable` | `datetime_immutable` | ✓ | Si lors d'une synchro le groupe a disparu côté Authentik |
-
-**Index** : `authentikId` (unique), `(visible, vanishedAt)` pour les listes admin.
-
-### 3.13 ExternalLink — `external_links`
+### 3.12 ExternalLink — `external_links`
 
 Spec : `docs/specifications.md` §3.12.
 
@@ -346,7 +336,7 @@ Spec : `docs/specifications.md` §3.12.
 | `enabled` | `bool` | `boolean` | ✗ | |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
 
-### 3.14 Following (Lot 4) — `followings`
+### 3.13 Following (Lot 4) — `followings`
 
 Pour le système "suivre un projet/tâche".
 
@@ -360,7 +350,7 @@ Pour le système "suivre un projet/tâche".
 
 **Contrainte unique** : `(user_id, subjectType, subjectId)`.
 
-### 3.15 CrossReference (Lot 4) — `cross_references`
+### 3.14 CrossReference (Lot 4) — `cross_references`
 
 Index inverse des références `#YYYY-NNN` détectées dans les contenus markdown. Reconstruit à chaque save d'une description ou d'un commentaire (subscriber Doctrine). Cf. specs §3.13.
 
@@ -377,7 +367,7 @@ Index inverse des références `#YYYY-NNN` détectées dans les contenus markdow
 
 **Index** : `(targetType, targetId, createdAt DESC)` pour la requête "objets référencés vers ici" (backlinks). `(sourceType, sourceId)` pour le diff au save.
 
-### 3.16 ApiToken (Lot 6) — `api_tokens`
+### 3.15 ApiToken (Lot 6) — `api_tokens`
 
 Pour les clés d'API citoyennes (à enrichir au Lot 6).
 
@@ -437,7 +427,7 @@ PK composite sur les deux colonnes, FK avec `ON DELETE CASCADE` côté entité p
                           └────────────┘
 ```
 
-Hors-graphe (transversaux) : `Category` (parent vers Category), `AuditEvent` (référence opaque tout sujet via `subjectType/subjectId`), `AuthentikGroup` (cache local des groupes Authentik, référencé par `WorkingGroup`), `ExternalLink`, `Following`, `CrossReference`, `ApiToken`, `NotificationPreference`.
+Hors-graphe (transversaux) : `Category` (parent vers Category), `AuditEvent` (référence opaque tout sujet via `subjectType/subjectId`), `ExternalLink`, `Following`, `CrossReference`, `ApiToken`, `NotificationPreference`.
 
 ## 6. Conventions d'évolution
 
