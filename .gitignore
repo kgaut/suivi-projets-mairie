@@ -11,14 +11,24 @@
 
 ###> docker compose overrides ###
 # Compose v2 charge automatiquement docker-compose.yml et
-# docker-compose.override.yml en plus des -f explicites. On les ignore
-# pour permettre à chaque dev d'avoir ses overrides locaux (ports,
-# volumes, vars d'env supplémentaires) sans polluer le repo.
+# docker-compose.override.yml (ainsi que les variantes compose.yaml et
+# compose.override.yaml) en plus des -f explicites. On ignore tous ces
+# fichiers pour permettre à chaque dev d'avoir ses overrides locaux
+# (ports, volumes, vars d'env supplémentaires) sans polluer le repo.
+# Notre stack officielle vit dans docker-compose.dev.yml et docker-compose.prod.yml
+# qui doivent être appelés explicitement avec -f.
 /docker-compose.yml
 /docker-compose.override.yml
+/compose.yaml
+/compose.override.yaml
 ###< docker compose overrides ###
 
 ###> symfony/asset-mapper ###
 /public/assets/
 /assets/vendor/
 ###< symfony/asset-mapper ###
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###

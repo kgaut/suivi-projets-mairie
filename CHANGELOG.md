@@ -19,6 +19,14 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Entité `App\Domain\User`** (projection locale d'Authentik) — PK Uuid v7, `authentikId` unique, `username`, `email`, `displayName`, `roles`, `groupsSnapshot`, `lastLoginAt`, `disabledAt`, attributs avatar (`avatarPath`, `authentikAvatarSourceUrl`, `authentikAvatarPath`, `authentikAvatarFetchedAt`), `avatarSource`, `gravatarAllowed`, `createdAt`, `updatedAt`. Implémente `Symfony\Component\Security\Core\User\UserInterface` avec `getUserIdentifier()` retournant `authentikId` (clé stable)
+- **Enum `App\Domain\Enum\AvatarSource`** : `AUTO` / `LOCAL` / `AUTHENTIK` / `GRAVATAR` / `INITIALS`
+- **`App\Infrastructure\Repository\UserRepository`** avec `findOneByAuthentikId()` pour la réconciliation au login
+- Migration Doctrine `Version20260506144756` créant la table `users` (Postgres : `JSON`, `UUID`, `TIMESTAMP WITHOUT TIME ZONE`, index unique `authentik_id`, index `email`)
+- Configuration Doctrine pointée vers `src/Domain` (au lieu de `src/Entity` par défaut), conforme aux specs §5.2
+- Bundles installés : `symfony/orm-pack`, `doctrine/doctrine-migrations-bundle`, `symfony/uid`, `symfony/security-bundle`, `symfony/test-pack` (phpunit en require-dev)
+- Suite de tests unitaires `App\Tests\Domain\UserTest` (9 tests, 29 assertions, 100 %)
+- `phpunit.dist.xml` testsuites séparées `Unit` (tests/Domain, tests/Application) et `Functional` (tests/Functional, tests/Controller)
 - Cadrage opérationnel détaillé du Lot 0 (`docs/lots/lot-0-cadrage.md`) — découpage en 4 vagues (squelette technique, OIDC, administration, audit/qualité/CI), 6 décisions techniques validées (AssetMapper, drenso/symfony-oidc-bundle, pas de mode stub OIDC, un seul worker Messenger, nom Sentry `spm`, Mailpit en HTTP direct), plan d'attaque côté issues
 - Pointer vers ce cadrage depuis `docs/roadmap.md` (Lot 0 marqué `🚧 en cours`)
 - Bootstrap Symfony 7.4 LTS (php ^8.4) avec Flex : `composer.json`, `composer.lock`, `symfony.lock`, structure `bin/console`, `public/index.php`, `config/`, `templates/base.html.twig`
