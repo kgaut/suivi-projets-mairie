@@ -329,7 +329,6 @@ Spec : `docs/specifications.md` §3.12.
 | `icon` | `?string` | `varchar(128)` | ✓ | Emoji, lettre ou nom d'icône |
 | `description` | `?string` | `varchar(255)` | ✓ | Tooltip |
 | `position` | `int` | `integer` | ✗ | |
-| `restrictedToRoles` | `array` | `text[]` | ✓ | Vide = visible par tous |
 | `enabled` | `bool` | `boolean` | ✗ | |
 | `createdAt` / `updatedAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
 

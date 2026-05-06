@@ -619,8 +619,8 @@ Cette liste est stockée en cache Redis avec TTL aligné sur la session, exposé
 Dans la barre de navigation principale, en plus du menu de l'outil, un **menu déroulant** affiche des raccourcis vers d'autres outils internes de la mairie (genre app launcher type "grille Google Apps"). Permet de circuler facilement entre les outils auto-hébergés.
 
 - Configuré côté **administration** (et/ou via fichier de config / `.env`, à trancher).
-- Chaque entrée : libellé, URL, icône (image ou emoji ou lettre), description courte (tooltip), groupe de visibilité optionnel (si tu veux cacher certains liens à certains rôles).
-- Stockage : entité `ExternalLink` simple (`label`, `url`, `icon`, `description`, `position`, `restrictedToRoles[]`, `enabled`).
+- Chaque entrée : libellé, URL, icône (image ou emoji ou lettre), description courte (tooltip). Visible par tout utilisateur authentifié — pas de restriction par rôle (décision tranchée).
+- Stockage : entité `ExternalLink` simple (`label`, `url`, `icon`, `description`, `position`, `enabled`).
 - UI : icône "grille" dans le header → dropdown ou panneau plein-écran sur mobile. Liens en target `_blank` avec `rel="noopener"`.
 - Pas d'authentification SSO transparente attendue côté app : on suppose que l'utilisateur est authentifié sur les outils externes via Authentik (le SSO étant déjà en place pour eux aussi).
 - 🟡 **À décider** : configuration via interface admin (plus pratique) ou via `.env` (plus simple pour la v0). Recommandation : **interface admin** dès le Lot 0 (entité + CRUD), reste léger à coder.

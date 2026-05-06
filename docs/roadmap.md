@@ -54,12 +54,12 @@ Squelette technique opérationnel + section administration de base + infrastruct
 - [ ] Tri et filtres sur la liste utilisateurs (par rôle, par groupe, recherche par nom/email)
 - [ ] Détail utilisateur : historique de connexions, contributions à venir (sera enrichi plus tard)
 - [ ] Pas de création/édition d'utilisateur dans l'app (c'est Authentik qui gère)
-- [ ] **Gestion des liens externes** (CRUD `ExternalLink` : libellé, URL, icône, description, position, restriction par rôle, actif/inactif)
+- [ ] **Gestion des liens externes** (CRUD `ExternalLink` : libellé, URL, icône, description, position, actif/inactif)
 
 **Menu d'outils externes (front)**
 
 - [ ] Composant Twig "lanceur d'apps" intégré dans le header (icône grille → dropdown)
-- [ ] Lecture des `ExternalLink` actifs filtrés par rôles de l'utilisateur courant
+- [ ] Lecture des `ExternalLink` actifs (visible par tout utilisateur authentifié)
 - [ ] Vue mobile adaptée (panneau plein écran plutôt que dropdown)
 - [ ] Cible `_blank` + `rel="noopener noreferrer"` pour la sécurité
 
