@@ -99,21 +99,22 @@ Cœur métier : CRUD de base avec assignation, statuts, groupes de travail et ge
 - [ ] Voters Project : owner / coOwner / restricted visibility
 - [ ] Transfert d'ownership (modale dédiée + audit)
 - [ ] Duplication d'un projet (copie en `brouillon` sans tâches)
-- [ ] Génération de la référence `#YYYY-NNN` (incrémentale annuelle, séquence Postgres dédiée Project)
+- [ ] Génération de la référence `#YYYY-NNN` (incrémentale annuelle, **séquence Postgres unique partagée** `entity_reference_seq_<year>` — utilisée aussi par Task, cf. specs §8.14)
 - [ ] Toggle `restrictedToWorkingGroups` sur Project (visibilité réservée aux membres des groupes de travail associés, cf. specs §3.1)
 
 **Tâches**
 
-- [ ] Entité `Task` complète selon §3.2 (reference, title, description, status, priority, **project (nullable)**, **visibility + restrictedToGroups (si autonome)**, assignee, requester, workingGroups hérités OU saisis manuellement, labels, dueDate, estimatedEffort, blockedReason, publicLabel, **source**, lastStatusChangeAt)
+- [ ] Entité `Task` complète selon §3.2 (reference, title, description, status, priority, **project (nullable)**, **parentTask (nullable, sous-tâches)**, **visibility + restrictedToGroups (si autonome)**, assignee, requester, workingGroups hérités OU saisis manuellement, labels, dueDate, estimatedEffort, blockedReason, publicLabel, **source**, lastStatusChangeAt)
 - [ ] Workflow Symfony pour le cycle de vie (6 statuts, transitions et garde-fous définis en §3.2)
 - [ ] CRUD Task (liste filtrée par projet, fiche, créer, éditer)
 - [ ] **Création de tâche autonome** (sans projet) : formulaire dédié avec champ `visibility`, saisie manuelle des `workingGroups`, source = `manual`
-- [ ] **Vue "Tâches autonomes"** `/taches/autonomes` (filtre `project=null`)
+- [ ] **Vue "Tâches autonomes"** `/taches/autonomes` (filtre `project=null AND parentTask=null`)
+- [ ] **Sous-tâches** : champ `parentTask`, validateur anti-cycle + profondeur max 3, breadcrumb sur fiche tâche, onglet "Sous-tâches" listant les enfants avec compteur `X/Y terminées`, cascade `annulee` sur sous-tâches non terminales si parente annulée, avertissement (non bloquant) à la clôture parente avec sous-tâches non terminales (cf. specs §3.2 sous-section "Sous-tâches")
 - [ ] **Rattachement à un projet** (action sur tâche autonome) et **détachement** (rendre une tâche autonome) avec audit
 - [ ] Champ "motif" obligatoire pour les transitions vers `bloquee` et `annulee`
 - [ ] Cascade : annulation automatique des tâches d'un projet `annule` (uniquement si la tâche a un projet)
 - [ ] Blocage des transitions de tâches si projet en `en_pause`/`termine`/`annule` (uniquement si la tâche a un projet)
-- [ ] Génération de la référence `#YYYY-NNN` (séquence Postgres dédiée Task, indépendante de celle de Project)
+- [ ] Génération de la référence `#YYYY-NNN` (séquence Postgres **unique partagée** avec Project, cf. décision §8.14)
 - [ ] Vue "Mes tâches" (assigné = moi) avec onglets par statut
 - [ ] Voters Task : assignée à moi / créateur (autonome) / projet dont je suis owner / admin
 - [ ] Surcharge des groupes de travail au niveau de la tâche (par défaut hérités du projet quand projet présent)
@@ -176,6 +177,13 @@ Visualisation et recherche.
 - [ ] Commentaires markdown sur Project et Task
 - [ ] Champ "visible par le demandeur" sur les commentaires de Task (case à cocher, faux par défaut)
 - [ ] Mentions `@utilisateur` (autocomplete)
+- [ ] **Références croisées `#YYYY-NNN`** dans descriptions et commentaires (cf. specs §3.13) :
+  - [ ] Service `CrossReferenceParser` (regex stricte, respect des blocs de code et liens existants)
+  - [ ] Linkifier markdown → HTML avec tooltip (statut, titre, assignée) et classes CSS par statut
+  - [ ] Entité `CrossReference` + subscriber Doctrine qui diff/insère au save de Project, Task, Comment
+  - [ ] Bloc "Référencé dans" sur les fiches Project et Task (backlinks ordonnés par date)
+  - [ ] Endpoint `GET /api/internal/references/search?q=...` (full-text Postgres, voters appliqués, rate limit 30/min)
+  - [ ] Composant Stimulus d'autocomplete au caractère `#` dans les textareas markdown (style GitHub), insertion `#YYYY-NNN-slug` à la sélection
 - [ ] Pièces jointes (upload, prévisualisation, suppression) — limites : **25 Mo / fichier, 10 fichiers max** par objet, types autorisés cf. specs §3.5
 - [ ] Interface `AttachmentStorage` isolée (implémentation `FileSystemStorage` en v1) pour permettre une bascule future vers une GED externe sans toucher au métier
 - [ ] Notifications in-app pour les agents (badge + dropdown)

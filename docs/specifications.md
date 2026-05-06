@@ -39,7 +39,7 @@ Un **projet** représente une initiative de la mairie (ex. "Refonte du site web"
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | Identifiant interne, immuable |
-| `reference` | string (10) | ✓ (généré) | Référence lisible incrémentale annuelle, ex. `#2026-014`, immuable. Compteur séparé Projet vs Tâche (séquence Postgres dédiée par type) |
+| `reference` | string (10) | ✓ (généré) | Référence lisible incrémentale annuelle, ex. `#2026-014`, immuable. **Compteur unique partagé** entre Project et Task (cf. §8.14 et §3.13 références croisées) |
 | `slug` | string (255) | ✓ (généré) | Pour les URLs ; généré du titre, peut être édité par un admin |
 | `title` | string (255) | ✓ | Titre du projet |
 | `summary` | string (255) | ✗ | Résumé en une phrase, affiché dans les listes |
@@ -145,7 +145,7 @@ Les voters appliquent : `visible = (visibility=public_interne OR user∈restrict
 
 ### 3.2 Tâche
 
-Une **tâche** est une unité de travail. Elle est généralement rattachée à un projet, mais peut aussi être **autonome** (sans projet parent) — typiquement pour des signalements ponctuels qui ne s'inscrivent pas dans une initiative plus large (ex. un signalement citoyen "nid de poule devant chez moi" remonté via l'API du Lot 6, ou une demande isolée traitée à la volée par un agent).
+Une **tâche** est une unité de travail. Elle peut être rattachée à un projet, à une **tâche parente** (sous-tâche), aux deux, ou à rien (autonome). Les tâches autonomes sont typiquement des signalements ponctuels qui ne s'inscrivent pas dans une initiative plus large (ex. un signalement citoyen "nid de poule devant chez moi" remonté via l'API du Lot 6, ou une demande isolée traitée à la volée par un agent).
 
 Une tâche peut être assignée à un agent, et peut découler d'une demande externe (cf. Demandeur §3.10).
 
@@ -154,12 +154,13 @@ Une tâche peut être assignée à un agent, et peut découler d'une demande ext
 | Attribut | Type | Obligatoire | Description |
 |---|---|---|---|
 | `id` | UUID v7 | ✓ | Identifiant interne, immuable |
-| `reference` | string (10) | ✓ (généré) | Référence lisible, ex. `#2026-0042`, immuable, incrémentale annuelle. Compteur séparé Tâche vs Projet |
+| `reference` | string (10) | ✓ (généré) | Référence lisible, ex. `#2026-0042`, immuable, incrémentale annuelle. **Compteur unique partagé** avec Project (cf. §8.14 et §3.13) |
 | `title` | string (255) | ✓ | Titre |
 | `description` | text (markdown) | ✗ | Détail de la tâche |
 | `status` | enum | ✓ | Voir cycle de vie ci-dessous |
 | `priority` | enum | ✓ | `basse` / `normale` (défaut) / `haute` / `critique` |
 | `project` | Project | ✗ | Projet parent (optionnel — voir §"Tâches autonomes" ci-dessous) |
+| `parentTask` | Task | ✗ | Tâche parente (sous-tâche). Cf. §"Sous-tâches" ci-dessous. Peut coexister avec `project` |
 | `visibility` | enum | ✓ (uniquement si `project=null`) | `public_interne` ou `restricted` (sinon hérité du projet parent) |
 | `restrictedToGroups` | string[] | ✗ | Groupes Authentik autorisés si `visibility=restricted` (et tâche autonome) |
 | `assignee` | User | ✗ | Agent assigné |
@@ -189,8 +190,28 @@ Une tâche peut être assignée à un agent, et peut découler d'une demande ext
   - `workingGroups` est saisi manuellement (pas d'héritage possible).
   - Pas de cascade d'annulation (puisqu'il n'y a pas de projet parent).
   - Pas de contrainte "projet en pause" sur les transitions de statut.
-- **Vue dédiée** : `/taches/autonomes` (filtre `project=null` sur la liste générale), accessible aux rôles `ROLE_AGENT` et au-dessus.
+- **Vue dédiée** : `/taches/autonomes` (filtre `project=null AND parentTask=null` sur la liste générale), accessible aux rôles `ROLE_AGENT` et au-dessus.
 - **Promotion vers un projet** : un agent peut, plus tard, rattacher une tâche autonome à un projet existant (ou en créer un et y rattacher la tâche). L'opération est tracée dans l'audit (`task.attached_to_project`).
+
+#### Sous-tâches (`parentTask`)
+
+Une tâche peut être **fille d'une autre tâche** (relation `parentTask`, FK auto-référente sur `Task`). Cas typiques :
+
+- Découper une tâche complexe en étapes (ex. "Refonte du formulaire de contact" → "Maquette", "Intégration", "Tests d'accessibilité").
+- Regrouper des micro-tâches issues d'une même demande (ex. signalement citoyen "trottoir abîmé" → 2 sous-tâches : "Constat sur place", "Devis").
+
+**Règles** :
+
+- **Profondeur maximale** : 3 niveaux (parent → enfant → petit-enfant). Au-delà, refus avec message explicite. Limite arbitraire mais évite les arborescences ingérables ; ajustable plus tard si retours terrain.
+- **Anti-cycle** : impossible d'assigner une descendante comme parente. Vérifié à la sauvegarde par un validateur `NoCycleValidator`.
+- **Cohérence avec le projet** : si `parentTask` est définie ET que la parente a un `project`, la sous-tâche **doit** appartenir au même projet (forcé à la sauvegarde). Si la parente est autonome, la sous-tâche peut être autonome ou rattachée à un projet.
+- **Visibilité héritée** : la sous-tâche hérite de la visibilité de sa parente (qui hérite du projet si présent). Pas de sous-tâche `restricted` sous une parente `public_interne` (interdit en v1, à reconsidérer si besoin légitime).
+- **Cycle de vie** : indépendant de la parente. Une sous-tâche peut être `termine` alors que sa parente est `en_cours`. **Pas de cascade automatique** au changement de statut de la parente, sauf :
+  - `parent → annulee` cascade en `annulee` sur les sous-tâches non terminales (événement `task.cascade_cancelled` sur chaque sous-tâche).
+  - Pour clôturer une parente en `termine` : avertissement (pas blocage) si des sous-tâches sont non terminales, l'utilisateur peut confirmer en cochant "ignorer les sous-tâches restantes" (avec audit trail).
+- **Détachement** : une sous-tâche peut être promue en tâche racine via `task.detached_from_parent` (event audit), idem pour rattachement (`task.attached_to_parent`).
+- **Affichage** : sur la fiche tâche, la parente apparaît en **breadcrumb** (cliquable) ; les enfants sont listés dans un onglet "Sous-tâches" avec leur statut, assignée et progression.
+- **Compteurs** : sur une tâche parente, affichage de `X/Y sous-tâches terminées` (utile pour la barre de progression).
 
 #### Cycle de vie
 
@@ -625,6 +646,57 @@ Dans la barre de navigation principale, en plus du menu de l'outil, un **menu d�
 - Pas d'authentification SSO transparente attendue côté app : on suppose que l'utilisateur est authentifié sur les outils externes via Authentik (le SSO étant déjà en place pour eux aussi).
 - 🟡 **À décider** : configuration via interface admin (plus pratique) ou via `.env` (plus simple pour la v0). Recommandation : **interface admin** dès le Lot 0 (entité + CRUD), reste léger à coder.
 
+### 3.13 Références croisées (cross-references)
+
+Dans les **descriptions** (Project, Task) et les **commentaires** (Lot 4), les utilisateurs peuvent référencer d'autres projets/tâches en saisissant leur référence. À la sauvegarde du contenu markdown, l'app **détecte automatiquement** ces références, les transforme en liens cliquables, et **persiste un index de backlinks** (relation inverse "référencé dans").
+
+#### Format
+
+- Référence courte : `#YYYY-NNN` (ex. `#2026-014`).
+- Référence longue (slug optionnel) : `#YYYY-NNN-slug-libre` (ex. `#2026-014-refonte-site`). Le slug n'est **pas** vérifié (pure aide visuelle pour le lecteur, comme sur GitHub).
+- L'unicité de `#YYYY-NNN` est globale : il n'y a **qu'une** entité (Project OU Task) qui porte cette référence dans une année donnée — cf. décision §8.14 mise à jour.
+
+#### Détection
+
+Service `CrossReferenceParser` qui :
+
+1. Tokenise le markdown (en respectant les blocs de code et les liens existants — pas de transformation à l'intérieur de `\`\`\`` ou de `[texte](url)`).
+2. Extrait les `#YYYY-NNN` (regex stricte avec word boundaries pour éviter `#2026-014abc`).
+3. Résout chaque référence vers un Project ou une Task. Si la référence n'existe pas, le texte est laissé tel quel (pas de lien cassé).
+4. Remplace dans le rendu HTML par un `<a>` avec :
+   - URL : `/projets/<slug>` ou `/taches/<id>` (selon le type)
+   - Texte : la référence telle qu'écrite (avec slug si présent)
+   - Tooltip : `[Statut] Titre — Assignée?`
+   - Classe CSS : `cross-ref cross-ref-project` ou `cross-ref-task`, plus `cross-ref-status-<status>` pour styler en fonction du statut (ex. terminé en barré).
+
+#### Backlinks (index inverse)
+
+À chaque sauvegarde d'un contenu (description ou commentaire), un subscriber Doctrine met à jour la table `cross_references` :
+
+- `sourceType` + `sourceId` : l'objet qui contient la référence (Task/Project/Comment)
+- `targetType` + `targetId` : l'objet référencé (Task/Project)
+- `createdAt`
+
+Sur la fiche d'un Project ou d'une Task, un onglet/bloc **"Référencé dans"** liste les sources qui pointent vers l'objet courant. Indexé pour requête en O(1) côté target.
+
+Suppression / édition : à chaque save, on diff l'ancienne et la nouvelle liste de références, on insère/supprime dans `cross_references` en conséquence.
+
+#### Autocomplete (à la frappe)
+
+Composant Stimulus inspiré de l'expérience GitHub :
+
+- Déclencheur : saisie du caractère `#` dans une textarea markdown (description, commentaire).
+- Endpoint backend : `GET /api/internal/references/search?q=<query>&limit=10` qui retourne JSON : `[{ ref, type, title, status, url }, ...]`.
+- Recherche : par référence (`#2026-` matche les refs de l'année), par titre (full-text Postgres `tsvector`), priorisée par récence (dernière modification).
+- Sécurité : applique les voters — seuls les objets visibles par l'utilisateur courant remontent.
+- Rate limit : 30 requêtes / minute / utilisateur (Symfony RateLimiter + Redis), cache navigateur 5 secondes.
+- À la sélection, insère `#YYYY-NNN-slug` dans le textarea.
+
+#### Audit
+
+- `cross_reference.created` (Lot 4) : `{ source: {type, id}, target: {type, id} }`
+- `cross_reference.removed` (Lot 4) : idem
+
 > 🟡 À remplir au fil des itérations. Pour chaque écran : objectif, données affichées, actions, règles de sécurité.
 
 - [ ] Écran d'accueil / dashboard
@@ -779,7 +851,7 @@ Toutes les questions ouvertes initiales ont été tranchées avec le PO. Les dé
 | 11 | Statuts visibles par le demandeur | **Libellés simplifiés mappés** : Reçu / En traitement / Traité / Sans suite. Mapping fixe en v1 (pas de surcharge) |
 | 12 | Revue obligatoire avant clôture | **Non** : l'assignée peut auto-valider sa propre revue. Mode "double validation" prévu en évolution future (paramètre par projet) |
 | 13 | Estimation d'effort | **T-shirt sizing** (XS / S / M / L / XL) |
-| 14 | Format de référence | **`#YYYY-NNN`** (sans préfixe). Compteurs séparés Project et Task (séquences Postgres dédiées). Le contexte (URL, badge type) lève l'ambiguïté |
+| 14 | Format de référence | **`#YYYY-NNN`** (sans préfixe). **Compteur unique partagé Project + Task** (séquence Postgres unique `entity_reference_seq_<year>`) — révision de la décision initiale, motivée par les références croisées §3.13 (un même `#YYYY-NNN` ne peut désigner qu'une entité). Slug optionnel en suffixe pour la lisibilité (`#2026-014-refonte-site`), non vérifié à la résolution |
 | 15 | Mapping groupe de travail ↔ Authentik | **Saisie libre** maintenant ; autocomplete via API Authentik prévu en v1.x |
 | 16 | Visibilité par groupe de travail | **Hybride** : par défaut organisationnel uniquement, mais toggle `restrictedToWorkingGroups` sur Project pour réserver la visibilité aux membres des groupes de travail associés |
 | Bonus | Filtrage d'accès à l'application | **Côté Authentik (Policy Binding) + côté app (`OIDC_REQUIRED_GROUPS`)** — defense in depth |

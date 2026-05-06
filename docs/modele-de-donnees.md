@@ -67,7 +67,7 @@ Spec : `docs/specifications.md` §3.1.
 | Champ | Type PHP | Type SQL | N | Notes |
 |---|---|---|---|---|
 | `id` | `Uuid` | `uuid` | ✗ | PK |
-| `reference` | `string` | `varchar(10)` | ✗ | Unique, format `#YYYY-NNN`, séquence Postgres `project_reference_seq_<year>` |
+| `reference` | `string` | `varchar(10)` | ✗ | Unique, format `#YYYY-NNN`, **séquence partagée** `entity_reference_seq_<year>` (compteur unique Project + Task, cf. specs §8.14) |
 | `slug` | `string` | `varchar(255)` | ✗ | Unique |
 | `title` | `string` | `varchar(255)` | ✗ | |
 | `summary` | `?string` | `varchar(255)` | ✓ | |
@@ -99,12 +99,13 @@ Spec : `docs/specifications.md` §3.2.
 | Champ | Type PHP | Type SQL | N | Notes |
 |---|---|---|---|---|
 | `id` | `Uuid` | `uuid` | ✗ | PK |
-| `reference` | `string` | `varchar(10)` | ✗ | Unique, séquence dédiée Task |
+| `reference` | `string` | `varchar(10)` | ✗ | Unique, **séquence partagée** avec Project (cf. specs §8.14) |
 | `title` | `string` | `varchar(255)` | ✗ | |
 | `description` | `?string` | `text` | ✓ | Markdown |
 | `status` | `TaskStatus` | `varchar(32)` | ✗ | enum |
 | `priority` | `TaskPriority` | `varchar(32)` | ✗ | défaut `NORMALE` |
 | `project` | `?Project` | FK `uuid` | ✓ | M2O — null = tâche autonome |
+| `parentTask` | `?Task` | FK `uuid` | ✓ | M2O auto-référente (sous-tâche). Profondeur max 3 niveaux, anti-cycle vérifié. Cf. specs §3.2 |
 | `visibility` | `?ProjectVisibility` | `varchar(32)` | ✓ | Obligatoire si `project=null`, sinon hérité |
 | `restrictedToGroups` | `array` | `text[]` | ✓ | Si `visibility=RESTRICTED` et tâche autonome |
 | `assignee` | `?User` | FK `uuid` | ✓ | M2O |
@@ -122,7 +123,7 @@ Spec : `docs/specifications.md` §3.2.
 | `createdBy` | `?User` | FK `uuid` | ✓ | Null si `source=CITIZEN_API` |
 | `updatedBy` | `User` | FK `uuid` | ✗ | |
 
-**Index** : `reference` (unique), `(status, project_id)`, `assignee_id`, `requester_id`, `(project_id, status, lastStatusChangeAt)` pour les requêtes Kanban / stagnation.
+**Index** : `reference` (unique), `(status, project_id)`, `assignee_id`, `requester_id`, `parent_task_id`, `(project_id, status, lastStatusChangeAt)` pour les requêtes Kanban / stagnation.
 
 ### 3.3 Milestone — `milestones`
 
@@ -346,7 +347,24 @@ Pour le système "suivre un projet/tâche".
 
 **Contrainte unique** : `(user_id, subjectType, subjectId)`.
 
-### 3.14 ApiToken (Lot 6) — `api_tokens`
+### 3.14 CrossReference (Lot 4) — `cross_references`
+
+Index inverse des références `#YYYY-NNN` détectées dans les contenus markdown. Reconstruit à chaque save d'une description ou d'un commentaire (subscriber Doctrine). Cf. specs §3.13.
+
+| Champ | Type PHP | Type SQL | N | Notes |
+|---|---|---|---|---|
+| `id` | `Uuid` | `uuid` | ✗ | PK |
+| `sourceType` | `string` | `varchar(16)` | ✗ | `PROJECT` / `TASK` / `COMMENT` |
+| `sourceId` | `Uuid` | `uuid` | ✗ | Objet contenant la référence |
+| `targetType` | `string` | `varchar(16)` | ✗ | `PROJECT` / `TASK` |
+| `targetId` | `Uuid` | `uuid` | ✗ | Objet référencé |
+| `createdAt` | `\DateTimeImmutable` | `datetime_immutable` | ✗ | |
+
+**Contrainte unique** : `(sourceType, sourceId, targetType, targetId)` — une même référence ne s'enregistre qu'une fois (mentions multiples du même `#XXX` dans une description = un seul lien).
+
+**Index** : `(targetType, targetId, createdAt DESC)` pour la requête "objets référencés vers ici" (backlinks). `(sourceType, sourceId)` pour le diff au save.
+
+### 3.15 ApiToken (Lot 6) — `api_tokens`
 
 Pour les clés d'API citoyennes (à enrichir au Lot 6).
 
