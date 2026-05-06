@@ -1,0 +1,19 @@
+
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+###> docker compose overrides ###
+# Compose v2 charge automatiquement docker-compose.yml et
+# docker-compose.override.yml en plus des -f explicites. On les ignore
+# pour permettre à chaque dev d'avoir ses overrides locaux (ports,
+# volumes, vars d'env supplémentaires) sans polluer le repo.
+/docker-compose.yml
+/docker-compose.override.yml
+###< docker compose overrides ###
