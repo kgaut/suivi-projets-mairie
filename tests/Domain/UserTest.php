@@ -6,9 +6,9 @@ namespace App\Tests\Domain;
 
 use App\Domain\Enum\AvatarSource;
 use App\Domain\User;
+use DateTimeImmutable;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
-use Symfony\Component\Uid\Uuid;
 
 #[CoversClass(User::class)]
 final class UserTest extends TestCase
@@ -17,7 +17,9 @@ final class UserTest extends TestCase
     {
         $user = new User('authentik-sub-123', 'jdupont', 'jean.dupont@mairie.example.fr', 'Jean Dupont');
 
-        $this->assertInstanceOf(Uuid::class, $user->getId());
+        // Uuid v7 → 36 caractères, version `7` au 15ᵉ char (RFC 9562 §5.7).
+        $this->assertSame(36, \strlen($user->getId()->toRfc4122()));
+        $this->assertSame('7', $user->getId()->toRfc4122()[14]);
         $this->assertSame('authentik-sub-123', $user->getAuthentikId());
         $this->assertSame('jdupont', $user->getUsername());
         $this->assertSame('jean.dupont@mairie.example.fr', $user->getEmail());
@@ -66,7 +68,7 @@ final class UserTest extends TestCase
         $user = new User('sub', 'u', 'u@example.fr', 'U');
         $this->assertNull($user->getLastLoginAt());
 
-        $loginAt = new \DateTimeImmutable('2026-05-06 10:00:00');
+        $loginAt = new DateTimeImmutable('2026-05-06 10:00:00');
         $user->recordLogin($loginAt);
 
         $this->assertEquals($loginAt, $user->getLastLoginAt());
@@ -86,7 +88,7 @@ final class UserTest extends TestCase
     public function testSetAuthentikAvatarStoresAllFields(): void
     {
         $user = new User('sub', 'u', 'u@example.fr', 'U');
-        $fetchedAt = new \DateTimeImmutable();
+        $fetchedAt = new DateTimeImmutable();
 
         $user->setAuthentikAvatar(
             'https://authentik.example.fr/media/users/abc.jpg',
@@ -102,7 +104,7 @@ final class UserTest extends TestCase
     public function testClearAuthentikAvatarResetsAllFields(): void
     {
         $user = new User('sub', 'u', 'u@example.fr', 'U');
-        $user->setAuthentikAvatar('url', 'path', new \DateTimeImmutable());
+        $user->setAuthentikAvatar('url', 'path', new DateTimeImmutable());
 
         $user->clearAuthentikAvatar();
 

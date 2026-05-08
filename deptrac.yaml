@@ -1,0 +1,103 @@
+# Configuration Deptrac — Suivi Projets Mairie
+#
+# Vérifie le respect des couches de l'architecture (cf. docs/qualite.md §3) :
+#   Controller  ──→ Application
+#                       │
+#                       ▼
+#                   Domain
+#                       ▲
+#                       │
+#               Infrastructure (implémente les interfaces du Domain)
+#
+# Règle de fer : Domain ne dépend de RIEN d'externe au Domain.
+# Tolérance : on autorise les attributs Doctrine sur les entités du Domain
+# (cf. specs §5.2 — choix pragmatique pour ne pas dupliquer).
+#
+# Usage : make deptrac (alias de `vendor/bin/deptrac analyse`)
+
+deptrac:
+    paths:
+        - src
+
+    exclude_files:
+        - '#src/Kernel\.php#'
+
+    layers:
+        - name: Controller
+          collectors:
+              - type: classLike
+                value: '^App\\Controller\\.*'
+
+        - name: Application
+          collectors:
+              - type: classLike
+                value: '^App\\Application\\.*'
+
+        - name: Domain
+          collectors:
+              - type: classLike
+                value: '^App\\Domain\\.*'
+
+        - name: Infrastructure
+          collectors:
+              - type: classLike
+                value: '^App\\Infrastructure\\.*'
+
+        - name: Security
+          collectors:
+              - type: classLike
+                value: '^App\\Security\\.*'
+
+        - name: Twig
+          collectors:
+              - type: classLike
+                value: '^App\\Twig\\.*'
+
+        - name: DataFixtures
+          collectors:
+              - type: classLike
+                value: '^App\\DataFixtures\\.*'
+
+        - name: Vendor
+          collectors:
+              - type: bool
+                must_not:
+                    - type: classLike
+                      value: '^App\\.*'
+
+    skip_violations:
+        # Tolérance documentée (cf. docs/qualite.md §3) : les attributs Doctrine
+        # sur les entités du Domain peuvent référencer les repositories de
+        # l'Infrastructure (`#[ORM\Entity(repositoryClass: ...)]`).
+        App\Domain\User:
+            - App\Infrastructure\Repository\UserRepository
+
+    ruleset:
+        Controller:
+            - Application
+            - Domain
+            - Twig
+            - Vendor
+        Application:
+            - Domain
+            - Vendor
+        Domain:
+            - Vendor
+        Infrastructure:
+            - Domain
+            - Application
+            - Vendor
+        Security:
+            - Application
+            - Domain
+            - Infrastructure
+            - Vendor
+        Twig:
+            - Application
+            - Domain
+            - Vendor
+        DataFixtures:
+            - Domain
+            - Application
+            - Infrastructure
+            - Vendor

@@ -28,9 +28,10 @@ Dans l'admin Authentik : **Applications → Providers → Create → OAuth2/Open
 | Client type | `Confidential` |
 | Client ID | (généré automatiquement, à copier) |
 | Client Secret | (généré automatiquement, à copier) |
-| Redirect URIs | `https://projets.mairie.example.fr/oidc/callback` (prod)<br>`http://localhost:8080/oidc/callback` (dev) |
+| Redirect URIs | `https://projets.mairie.example.fr/login_check` (prod)<br>`https://spm.localhost/login_check` (dev) |
 | Signing Key | `authentik Self-signed Certificate` |
 | Scopes | `openid`, `email`, `profile`, `groups` |
+| Post-logout Redirect URIs | `https://projets.mairie.example.fr/` (prod)<br>`https://spm.localhost/` (dev) — utilisé après le logout SSO pour ramener l'utilisateur sur l'app |
 
 > Important : **un seul provider par environnement**. Crée-en un pour la prod et un pour le dev (avec son propre redirect URI).
 
@@ -180,12 +181,27 @@ Le mapping côté app :
 
 ### 2.4 Logout
 
-Deux niveaux :
+Deux niveaux, **automatiques** côté app via le bundle drenso :
 
-1. **Logout local** : `/logout` détruit la session Symfony.
-2. **Logout SSO** (recommandé) : redirige ensuite vers `https://authentik.mairie.example.fr/application/o/suivi-projets-mairie/end-session/` pour invalider la session Authentik.
+1. **Logout local** — `/logout` détruit la session Symfony (cookie + storage).
+2. **Logout SSO** — drenso s'abonne au `LogoutEvent` Symfony et redirige automatiquement vers le `end_session_endpoint` du well-known Authentik avec :
+   - `id_token_hint` : récupéré depuis la session Symfony (token OIDC)
+   - `post_logout_redirect_uri` : la valeur de `logout.target` du firewall (par défaut `/` de l'app)
 
-À configurer dans `security.yaml` (`logout.delete_cookies` + `logout.target` pointant vers l'endpoint SSO).
+Côté `security.yaml` :
+
+```yaml
+firewalls:
+    main:
+        oidc:
+            enable_end_session_listener: true
+            use_logout_target_path: true
+        logout:
+            path: app_logout
+            target: /
+```
+
+**Pré-requis Authentik** : l'URL post-logout (typiquement `https://projets.mairie.example.fr/` en prod ou `https://spm.localhost/` en dev) doit être listée dans `Post-logout Redirect URIs` du provider OIDC (cf. §1.1) — sinon Authentik refuse le logout SSO et le user reste authentifié côté IdP.
 
 ## 3. Test de la configuration
 

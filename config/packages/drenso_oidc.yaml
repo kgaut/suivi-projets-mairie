@@ -1,0 +1,12 @@
+drenso_oidc:
+    default_client: default
+    clients:
+        default:
+            well_known_url: '%env(OIDC_WELL_KNOWN_URL)%'
+            client_id: '%env(OIDC_CLIENT_ID)%'
+            client_secret: '%env(OIDC_CLIENT_SECRET)%'
+            # Authentik supporte PKCE — on l'active pour mitiger le code interception attack
+            code_challenge_method: 'S256'
+            # Cache jwks et well-known dans Redis (1h) pour réduire la latence du callback
+            well_known_cache_time: 3600
+            jwks_cache_time: 3600

@@ -7,6 +7,21 @@
 # Put parameters here that don't need to change on each machine where the app is deployed
 # https://symfony.com/doc/current/best_practices.html#use-parameters-for-application-configuration
 parameters:
+    # Groupe Authentik qui confère ROLE_ADMIN à un utilisateur (cf. specs §2).
+    # Les autres rôles sont calculés dynamiquement par les voters selon l'objet
+    # (Project / Task). Configurable via .env / .env.local.
+    app.oidc_admin_group: '%env(OIDC_ADMIN_GROUP)%'
+
+    # Filtrage defense in depth (cf. specs §5.3) : liste CSV de groupes Authentik
+    # dont l'utilisateur doit être membre pour se connecter à l'app. Vide → pas
+    # de filtrage côté app (mais Policy Binding Authentik reste en place).
+    app.oidc_required_groups: '%env(OIDC_REQUIRED_GROUPS)%'
+
+    # Scopes OIDC demandés à Authentik au moment de l'authorization redirect.
+    # Chaîne séparée par des espaces (format OAuth2 standard). `openid` est
+    # obligatoire ; `email`, `profile`, `groups` sont nécessaires à la
+    # réconciliation (cf. OidcUserProvider) et au filtrage par groupes.
+    app.oidc_scopes: '%env(OIDC_SCOPES)%'
 
 services:
     # default configuration for services in *this* file
@@ -18,6 +33,32 @@ services:
     # this creates a service per class whose id is the fully-qualified class name
     App\:
         resource: '../src/'
+        exclude:
+            - '../src/Domain/'
+            - '../src/Kernel.php'
+
+    App\Security\OidcUserProvider:
+        arguments:
+            $adminGroup: '%app.oidc_admin_group%'
+
+    App\Security\OidcAccessGuard:
+        arguments:
+            $requiredGroupsCsv: '%app.oidc_required_groups%'
+
+    App\Controller\SecurityController:
+        arguments:
+            $scopes: '%app.oidc_scopes%'
+        tags: ['controller.service_arguments']
+
+    # Stockage des PJ et avatars : implémentation locale en v1, à remplacer
+    # par une GED externe au Lot 4 (cf. specs §3.5 et §6).
+    App\Application\Storage\AttachmentStorageInterface:
+        alias: App\Infrastructure\Storage\LocalAttachmentStorage
+
+    App\Infrastructure\Storage\LocalAttachmentStorage:
+        arguments:
+            $rootDir: '%kernel.project_dir%/var/uploads'
+            $publicPrefix: '/uploads/'
 
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

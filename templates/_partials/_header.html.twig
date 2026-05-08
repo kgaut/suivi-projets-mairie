@@ -36,11 +36,10 @@
                 lg:static lg:flex lg:flex-row lg:items-center lg:gap-4 lg:bg-transparent lg:p-0 lg:shadow-none
             "
         >
-            {% include '_partials/_nav.html.twig' %}
+            {{ include('_partials/_nav.html.twig') }}
 
             <div class="mt-auto flex items-center gap-3 border-t border-slate-200 pt-4 lg:ml-auto lg:mt-0 lg:border-0 lg:pt-0">
-                {# Slot menu utilisateur — sera enrichi en Vague 2 (login OIDC). #}
-                <span class="text-sm text-slate-500">Non connecté</span>
+                {{ include('_partials/_user_menu.html.twig') }}
             </div>
         </nav>
     </div>
