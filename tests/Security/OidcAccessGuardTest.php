@@ -143,11 +143,15 @@ final class OidcAccessGuardTest extends TestCase
         $dispatcher = new EventDispatcher();
         $dispatcher->addListener(
             AccessDenied::class,
-            static function () use (&$dispatched): void { ++$dispatched; },
+            static function () use (&$dispatched): void {
+                ++$dispatched;
+            },
         );
         $dispatcher->addListener(
             UserDisabled::class,
-            static function () use (&$dispatched): void { ++$dispatched; },
+            static function () use (&$dispatched): void {
+                ++$dispatched;
+            },
         );
 
         $guard = new OidcAccessGuard('spm_users', $em, new NullLogger(), $dispatcher);

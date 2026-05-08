@@ -74,14 +74,17 @@ final readonly class OidcUserProvider implements OidcUserProviderInterface
                 $diff['username'] = ['before' => $user->getUsername(), 'after' => $newUsername];
                 $user->setUsername($newUsername);
             }
+
             if ($user->getEmail() !== $newEmail) {
                 $diff['email'] = ['before' => $user->getEmail(), 'after' => $newEmail];
                 $user->setEmail($newEmail);
             }
+
             if ($user->getDisplayName() !== $newDisplayName) {
                 $diff['display_name'] = ['before' => $user->getDisplayName(), 'after' => $newDisplayName];
                 $user->setDisplayName($newDisplayName);
             }
+
             if ($user->getGroupsSnapshot() !== $newGroups) {
                 $diff['groups'] = ['before' => $user->getGroupsSnapshot(), 'after' => $newGroups];
             }

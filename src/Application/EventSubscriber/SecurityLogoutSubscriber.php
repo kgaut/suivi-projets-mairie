@@ -7,6 +7,7 @@ namespace App\Application\EventSubscriber;
 use App\Application\Event\Security\UserLoggedOut;
 use App\Domain\User;
 use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\Security\Core\Authentication\Token\TokenInterface;
 use Symfony\Component\Security\Http\Event\LogoutEvent;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
@@ -32,7 +33,7 @@ final readonly class SecurityLogoutSubscriber implements EventSubscriberInterfac
     public function onLogout(LogoutEvent $event): void
     {
         $token = $event->getToken();
-        if ($token === null) {
+        if (!$token instanceof TokenInterface) {
             return;
         }
 
