@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Application\Event\Security\AccessDenied;
+use App\Application\Event\User\UserDisabled;
 use App\Domain\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Filtrage d'accès à l'application (defense in depth, cf. specs §5.3).
@@ -31,6 +34,7 @@ final readonly class OidcAccessGuard
         string $requiredGroupsCsv,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
+        private EventDispatcherInterface $eventDispatcher,
     ) {
         $this->requiredGroups = $this->parseCsv($requiredGroupsCsv);
     }
@@ -63,6 +67,14 @@ final readonly class OidcAccessGuard
         // garde le sub Authentik pour préserver l'historique futur).
         $user->disable();
         $this->entityManager->flush();
+
+        $context = [
+            'reason' => 'oidc_required_groups',
+            'user_groups' => $userGroups,
+            'required_groups' => $this->requiredGroups,
+        ];
+        $this->eventDispatcher->dispatch(new AccessDenied($user->getAuthentikId(), $context));
+        $this->eventDispatcher->dispatch(new UserDisabled($user->getAuthentikId(), ['reason' => 'oidc_required_groups']));
 
         throw new CustomUserMessageAuthenticationException('Accès non autorisé : votre compte n\'appartient à aucun groupe autorisé pour cette application.');
     }

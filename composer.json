@@ -70,10 +70,12 @@
             "importmap:install": "symfony-cmd"
         },
         "post-install-cmd": [
-            "@auto-scripts"
+            "@auto-scripts",
+            "vendor/bin/grumphp git:init"
         ],
         "post-update-cmd": [
-            "@auto-scripts"
+            "@auto-scripts",
+            "vendor/bin/grumphp git:init"
         ]
     },
     "conflict": {

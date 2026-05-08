@@ -19,6 +19,24 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Dispatch effectif des événements `AuditableEvent` dans le flow OIDC** (consolidation vague 4) : les classes d'événements applicatifs définies au Lot 0 étaient des coquilles vides — le subscriber `AuditableEventLogger` écoutait sans rien recevoir. 5 événements sont désormais dispatchés
+  - `App\Application\Event\User\UserFirstSeen` : émis lors de la création d'une nouvelle projection `User` (`OidcUserProvider::ensureUserExists()`)
+  - `App\Application\Event\User\UserProfileUpdated` : émis quand un attribut Authentik change entre deux logins (username, email, displayName, groupsSnapshot). Le contexte porte le diff `before` / `after` par champ
+  - `App\Application\Event\Security\UserLoggedIn` : émis à chaque login réussi (après le filtrage `OidcAccessGuard` et le cache d'avatar)
+  - `App\Application\Event\Security\AccessDenied` : émis dans `OidcAccessGuard` quand l'utilisateur ne valide pas `OIDC_REQUIRED_GROUPS`. Contexte : `reason`, `user_groups`, `required_groups`
+  - `App\Application\Event\User\UserDisabled` : émis dans la foulée d'`AccessDenied` (effet de bord local du rejet)
+  - `App\Application\Event\Security\UserLoggedOut` : émis par le nouveau subscriber `App\Application\EventSubscriber\SecurityLogoutSubscriber` qui ponte le `LogoutEvent` natif de Symfony Security
+  - `LoginFailed` et `SessionExpired` restent volontairement non dispatchés (reportés au Lot 2 — exigent du code d'infrastructure additionnel : subscriber sur les exceptions OIDC du callback, commande de nettoyage de session expirée)
+- Tests unitaires couvrant les dispatches : `OidcAccessGuardTest::testRejectionDispatchesAccessDeniedAndUserDisabledEvents`, `OidcAccessGuardTest::testAllowedUserDoesNotDispatchEvents`, `OidcUserProviderTest::testNewUserDispatchesUserFirstSeenAndUserLoggedIn`, `OidcUserProviderTest::testReturningUserWithChangedFieldsDispatchesUserProfileUpdated`, `OidcUserProviderTest::testReturningUserWithoutChangesDoesNotDispatchUserProfileUpdated`, et `tests/Application/EventSubscriber/SecurityLogoutSubscriberTest.php` (4 tests)
+
+### Changed
+
+- **Signature de `OidcAccessGuard::__construct()`** : ajout d'un quatrième paramètre `Symfony\Contracts\EventDispatcher\EventDispatcherInterface $eventDispatcher`. Auto-injecté par le container via `services.yaml` (autowire). Tests existants mis à jour
+- **Signature de `OidcUserProvider::__construct()`** : ajout d'un cinquième paramètre `EventDispatcherInterface $eventDispatcher` (avant `string $adminGroup`). Idem auto-injection. Tests existants mis à jour
+- **`composer.json` post-install / post-update** : ajout de `vendor/bin/grumphp git:init` après `@auto-scripts` pour garantir l'installation des hooks pre-commit / pre-push même si le composer plugin GrumPHP n'a pas pu les poser. La commande est idempotente
+
+### Added
+
 - **Outillage qualité branché à la racine** : `phpstan.neon.dist` (level 9 + extensions Symfony / Doctrine / PHPUnit auto-installées via `phpstan/extension-installer`), `.php-cs-fixer.dist.php` (preset Symfony + Symfony:risky + PSR-12 + `@PHP84Migration` + `@PHPUnit100Migration:risky` ; `yoda_style` désactivé volontairement), `rector.php` (`withPhpSets(php84: true)` + `withComposerBased(symfony, doctrine, phpunit)` + `withPreparedSets(deadCode, codeQuality, codingStyle, typeDeclarations, privatization, earlyReturn, instanceOf)`), `.twig-cs-fixer.dist.php` (standards Twig CS Fixer + Symfony), `deptrac.yaml` (couches Controller / Application / Domain / Infrastructure / Security / Twig / DataFixtures / Vendor avec ruleset strict `Controller→Application→Domain` et tolérance documentée `Domain→Infrastructure` pour `#[ORM\Entity(repositoryClass)]`)
 - **GrumPHP** (`phpro/grumphp` ^2.20) : `grumphp.yml` à la racine. Hooks pre-commit (composer + phpcsfixer + twigcsfixer + yamllint) et testsuite prepush (phpstan + securitychecker_symfony). Hook git auto-installé via `composer install`. Contournement ponctuel via `git commit --no-verify`
 - **Sentry** (`sentry/sentry-symfony` ^5.10) : bundle enregistré dans `config/bundles.php`, `config/packages/sentry.yaml` (DSN via `SENTRY_DSN`, environment via `SENTRY_ENV`, release via `APP_VERSION`, `send_default_pii: false` pour le RGPD, traces 10 %, profiling désactivé v1, `NotFoundHttpException` et `AccessDeniedException` filtrés des envois Sentry, capture Messenger activée). Override `when@test` qui désactive Sentry sur la testsuite
