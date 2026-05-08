@@ -23,12 +23,12 @@
             Aller au contenu principal
         </a>
 
-        {% include '_partials/_header.html.twig' %}
+        {{ include('_partials/_header.html.twig') }}
 
         <main id="main" class="flex-1">
             {% block body %}{% endblock %}
         </main>
 
-        {% include '_partials/_footer.html.twig' %}
+        {{ include('_partials/_footer.html.twig') }}
     </body>
 </html>

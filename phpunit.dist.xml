@@ -7,6 +7,9 @@
          failOnDeprecation="true"
          failOnNotice="true"
          failOnWarning="true"
+         displayDetailsOnTestsThatTriggerDeprecations="true"
+         displayDetailsOnPhpunitDeprecations="true"
+         displayDetailsOnTestsThatTriggerNotices="true"
          bootstrap="tests/bootstrap.php"
          cacheDirectory=".phpunit.cache"
 >
@@ -21,6 +24,9 @@
         <testsuite name="Unit">
             <directory>tests/Domain</directory>
             <directory>tests/Application</directory>
+            <directory>tests/Infrastructure</directory>
+            <directory>tests/Security</directory>
+            <directory>tests/Twig</directory>
         </testsuite>
         <testsuite name="Functional">
             <directory>tests/Functional</directory>

@@ -1,0 +1,28 @@
+# Configuration Sentry — suivi des erreurs en prod.
+#
+# Cf. docs/qualite.md §10 pour le rationale et les conventions :
+#   - DSN injecté via SENTRY_DSN (vide en dev = bundle inactif)
+#   - SENTRY_ENV distinct d'APP_ENV (permet plusieurs envs prod différenciés)
+#   - APP_VERSION mappe les erreurs au tag git correspondant (release tracking)
+#   - send_default_pii: false → RGPD : pas de cookies/IP/headers user envoyés
+#   - 404 et AccessDenied filtrés (signalés dans les logs locaux uniquement)
+sentry:
+    dsn: '%env(SENTRY_DSN)%'
+    options:
+        environment: '%env(SENTRY_ENV)%'
+        release: '%env(APP_VERSION)%'
+        send_default_pii: false
+        traces_sample_rate: 0.1
+        profiles_sample_rate: 0.0
+        ignore_exceptions:
+            - Symfony\Component\HttpKernel\Exception\NotFoundHttpException
+            - Symfony\Component\Security\Core\Exception\AccessDeniedException
+    register_error_listener: true
+    register_error_handler: true
+    messenger:
+        enabled: true
+        capture_soft_fails: true
+
+when@test:
+    sentry:
+        dsn: ~

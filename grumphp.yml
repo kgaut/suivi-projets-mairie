@@ -1,0 +1,54 @@
+# Configuration GrumPHP — orchestration des hooks pre-commit / pre-push.
+#
+# Cf. docs/qualite.md §6.
+#
+# Pre-commit (rapide) : style + lint sur les fichiers modifiés.
+# Pre-push   (complet) : phpstan + securitychecker.
+#
+# Contournement ponctuel : `git commit --no-verify`.
+grumphp:
+    process_timeout: 120
+    stop_on_failure: false
+    hooks_dir: ~
+    hooks_preset: local
+    git_hook_variables:
+        EXEC_GRUMPHP_COMMAND: 'exec'
+    tasks:
+        composer:
+            file: ./composer.json
+            no_check_publish: true
+            strict: false
+        phpcsfixer:
+            allow_risky: true
+            cache_file: var/cache/.php-cs-fixer.cache
+            config: .php-cs-fixer.dist.php
+            verbose: true
+            triggered_by: ['php']
+        twigcsfixer:
+            paths: [templates]
+            config: .twig-cs-fixer.dist.php
+            triggered_by: ['twig']
+        phpstan:
+            configuration: phpstan.neon.dist
+            memory_limit: '-1'
+            triggered_by: ['php']
+        yamllint:
+            whitelist_patterns:
+                - /^config\/.*\.ya?ml$/
+                - /^translations\/.*\.ya?ml$/
+            ignore_patterns:
+                - /^vendor\/.*/
+        securitychecker_symfony:
+            lockfile: ./composer.lock
+
+    testsuites:
+        precommit:
+            tasks:
+                - composer
+                - phpcsfixer
+                - twigcsfixer
+                - yamllint
+        prepush:
+            tasks:
+                - phpstan
+                - securitychecker_symfony
