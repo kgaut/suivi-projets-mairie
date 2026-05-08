@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Application\Event\Security\UserLoggedIn;
+use App\Application\Event\User\UserFirstSeen;
+use App\Application\Event\User\UserProfileUpdated;
 use App\Application\Service\Avatar\AuthentikAvatarFetcher;
 use App\Domain\User;
 use App\Infrastructure\Repository\UserRepository;
@@ -14,6 +17,7 @@ use Drenso\OidcBundle\Security\UserProvider\OidcUserProviderInterface;
 use InvalidArgumentException;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
 /**
@@ -37,45 +41,76 @@ final readonly class OidcUserProvider implements OidcUserProviderInterface
         private EntityManagerInterface $entityManager,
         private OidcAccessGuard $accessGuard,
         private AuthentikAvatarFetcher $avatarFetcher,
+        private EventDispatcherInterface $eventDispatcher,
         private string $adminGroup,
     ) {
     }
 
     public function ensureUserExists(string $userIdentifier, OidcUserData $userData, OidcTokens $tokens): void
     {
-        $user = $this->users->findOneByAuthentikId($userIdentifier);
-        if (!$user instanceof User) {
+        $existing = $this->users->findOneByAuthentikId($userIdentifier);
+        $isNewUser = !$existing instanceof User;
+
+        $newUsername = $this->resolveUsername($userData, $userIdentifier);
+        $newEmail = $userData->getEmail();
+        $newDisplayName = $this->resolveDisplayName($userData);
+        $newGroups = $this->resolveGroups($userData);
+
+        $diff = [];
+
+        if ($isNewUser) {
             $user = new User(
                 authentikId: $userIdentifier,
-                username: $this->resolveUsername($userData, $userIdentifier),
-                email: $userData->getEmail(),
-                displayName: $this->resolveDisplayName($userData),
+                username: $newUsername,
+                email: $newEmail,
+                displayName: $newDisplayName,
             );
             $this->entityManager->persist($user);
         } else {
-            // Mise à jour des champs Authentik à chaque login (peuvent changer côté IdP)
-            $user->setUsername($this->resolveUsername($userData, $userIdentifier));
-            $user->setEmail($userData->getEmail());
-            $user->setDisplayName($this->resolveDisplayName($userData));
+            $user = $existing;
+            // Mise à jour des champs Authentik à chaque login (peuvent changer côté IdP).
+            // On capture le diff pour l'événement UserProfileUpdated.
+            if ($user->getUsername() !== $newUsername) {
+                $diff['username'] = ['before' => $user->getUsername(), 'after' => $newUsername];
+                $user->setUsername($newUsername);
+            }
+            if ($user->getEmail() !== $newEmail) {
+                $diff['email'] = ['before' => $user->getEmail(), 'after' => $newEmail];
+                $user->setEmail($newEmail);
+            }
+            if ($user->getDisplayName() !== $newDisplayName) {
+                $diff['display_name'] = ['before' => $user->getDisplayName(), 'after' => $newDisplayName];
+                $user->setDisplayName($newDisplayName);
+            }
+            if ($user->getGroupsSnapshot() !== $newGroups) {
+                $diff['groups'] = ['before' => $user->getGroupsSnapshot(), 'after' => $newGroups];
+            }
         }
 
-        $groups = $this->resolveGroups($userData);
-        $user->setGroupsSnapshot($groups);
-        $user->setRoles($this->resolveRoles($groups));
+        $user->setGroupsSnapshot($newGroups);
+        $user->setRoles($this->resolveRoles($newGroups));
         $user->recordLogin();
 
         $this->entityManager->flush();
 
+        if ($isNewUser) {
+            $this->eventDispatcher->dispatch(new UserFirstSeen($userIdentifier));
+        } elseif ($diff !== []) {
+            $this->eventDispatcher->dispatch(new UserProfileUpdated($userIdentifier, $diff));
+        }
+
         // Filtrage defense in depth (cf. specs §5.3) : l'utilisateur doit
         // appartenir à au moins un des OIDC_REQUIRED_GROUPS. En cas de rejet,
-        // le user est désactivé localement et une exception interrompt l'auth.
-        $this->accessGuard->ensureUserIsAllowed($user, $groups);
+        // l'accessGuard dispatche AccessDenied + UserDisabled puis throw.
+        $this->accessGuard->ensureUserIsAllowed($user, $newGroups);
 
         // Cache l'avatar Authentik (claim `picture`) localement si présent
         // et si pas trop ancien (TTL 24 h). Échec silencieux : ne casse
         // jamais le login (fallback Gravatar / initiales par UserAvatarResolver).
         $picture = $userData->getUserDataString('picture');
         $this->avatarFetcher->fetchIfNeeded($user, $picture !== '' ? $picture : null);
+
+        $this->eventDispatcher->dispatch(new UserLoggedIn($userIdentifier));
     }
 
     public function loadOidcUser(string $userIdentifier): UserInterface

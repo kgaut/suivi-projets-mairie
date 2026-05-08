@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Security;
 
+use App\Application\Event\Security\UserLoggedIn;
+use App\Application\Event\User\UserFirstSeen;
+use App\Application\Event\User\UserProfileUpdated;
 use App\Application\Service\Avatar\AuthentikAvatarFetcher;
 use App\Application\Storage\AttachmentStorageInterface;
 use App\Domain\User;
@@ -18,6 +21,7 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 use stdClass;
+use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 
@@ -51,7 +55,7 @@ final class OidcUserProviderTest extends TestCase
             ->with('sub-new')
             ->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $provider->ensureUserExists('sub-new', new OidcUserData([
             'sub' => 'sub-new',
@@ -87,7 +91,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $provider->ensureUserExists('sub-admin', new OidcUserData([
             'sub' => 'sub-admin',
@@ -113,7 +117,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn($existing);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $provider->ensureUserExists('sub-existing', new OidcUserData([
             'sub' => 'sub-existing',
@@ -144,7 +148,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $provider->ensureUserExists('sub-x', new OidcUserData([
             'sub' => 'sub-x',
@@ -170,7 +174,7 @@ final class OidcUserProviderTest extends TestCase
             ->with('sub-found')
             ->willReturn($existing);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $this->assertSame($existing, $provider->loadUserByIdentifier('sub-found'));
     }
@@ -181,7 +185,7 @@ final class OidcUserProviderTest extends TestCase
         $repo = $this->createMock(UserRepository::class);
         $repo->method('findOneByAuthentikId')->willReturn(null);
 
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $this->expectException(UserNotFoundException::class);
         $provider->loadUserByIdentifier('sub-missing');
@@ -191,9 +195,113 @@ final class OidcUserProviderTest extends TestCase
     {
         $em = $this->createMock(EntityManagerInterface::class);
         $repo = $this->createMock(UserRepository::class);
-        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), 'admin_spm');
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), new EventDispatcher(), 'admin_spm');
 
         $this->assertTrue($provider->supportsClass(User::class));
         $this->assertFalse($provider->supportsClass(stdClass::class));
+    }
+
+    public function testNewUserDispatchesUserFirstSeenAndUserLoggedIn(): void
+    {
+        $em = $this->createMock(EntityManagerInterface::class);
+        $repo = $this->createMock(UserRepository::class);
+        $repo->method('findOneByAuthentikId')->willReturn(null);
+
+        $captured = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(UserFirstSeen::class, static function (UserFirstSeen $e) use (&$captured): void {
+            $captured['first_seen'] = $e;
+        });
+        $dispatcher->addListener(UserLoggedIn::class, static function (UserLoggedIn $e) use (&$captured): void {
+            $captured['logged_in'] = $e;
+        });
+        $dispatcher->addListener(UserProfileUpdated::class, static function (UserProfileUpdated $e) use (&$captured): void {
+            $captured['profile_updated'] = $e;
+        });
+
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), $dispatcher, 'admin_spm');
+
+        $provider->ensureUserExists('sub-new', new OidcUserData([
+            'sub' => 'sub-new',
+            'preferred_username' => 'jdupont',
+            'email' => 'jean@mairie.example.fr',
+            'name' => 'Jean Dupont',
+            'groups' => ['commission-numerique'],
+        ]), $this->tokens());
+
+        $this->assertArrayHasKey('first_seen', $captured);
+        $this->assertSame('sub-new', $captured['first_seen']->subjectAuthentikId());
+        $this->assertSame('user', $captured['first_seen']->category());
+        $this->assertSame('first_seen', $captured['first_seen']->action());
+
+        $this->assertArrayHasKey('logged_in', $captured);
+        $this->assertSame('sub-new', $captured['logged_in']->subjectAuthentikId());
+        $this->assertSame('security', $captured['logged_in']->category());
+        $this->assertSame('login.success', $captured['logged_in']->action());
+
+        $this->assertArrayNotHasKey('profile_updated', $captured, 'UserProfileUpdated must not fire on creation');
+    }
+
+    public function testReturningUserWithChangedFieldsDispatchesUserProfileUpdated(): void
+    {
+        $existing = new User('sub-existing', 'old_username', 'old@example.fr', 'Old Name');
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $repo = $this->createMock(UserRepository::class);
+        $repo->method('findOneByAuthentikId')->willReturn($existing);
+
+        $captured = [];
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(UserProfileUpdated::class, static function (UserProfileUpdated $e) use (&$captured): void {
+            $captured[] = $e;
+        });
+
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), $dispatcher, 'admin_spm');
+
+        $provider->ensureUserExists('sub-existing', new OidcUserData([
+            'sub' => 'sub-existing',
+            'preferred_username' => 'new_username',
+            'email' => 'new@mairie.example.fr',
+            'name' => 'New Name',
+            'groups' => ['nouveau-groupe'],
+        ]), $this->tokens());
+
+        $this->assertCount(1, $captured);
+        $event = $captured[0];
+        $this->assertSame('sub-existing', $event->subjectAuthentikId());
+        $context = $event->context();
+        $this->assertArrayHasKey('username', $context);
+        $this->assertArrayHasKey('email', $context);
+        $this->assertArrayHasKey('display_name', $context);
+        $this->assertArrayHasKey('groups', $context);
+        $this->assertSame(['before' => 'old_username', 'after' => 'new_username'], $context['username']);
+    }
+
+    public function testReturningUserWithoutChangesDoesNotDispatchUserProfileUpdated(): void
+    {
+        $existing = new User('sub-stable', 'username', 'email@e.fr', 'Display Name');
+        $existing->setGroupsSnapshot(['groupe-stable']);
+
+        $em = $this->createMock(EntityManagerInterface::class);
+        $repo = $this->createMock(UserRepository::class);
+        $repo->method('findOneByAuthentikId')->willReturn($existing);
+
+        $dispatched = 0;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(UserProfileUpdated::class, static function () use (&$dispatched): void {
+            ++$dispatched;
+        });
+
+        $provider = new OidcUserProvider($repo, $em, new OidcAccessGuard('', $em, new NullLogger(), new EventDispatcher()), new AuthentikAvatarFetcher(new MockHttpClient(), $this->createStub(AttachmentStorageInterface::class), $em), $dispatcher, 'admin_spm');
+
+        $provider->ensureUserExists('sub-stable', new OidcUserData([
+            'sub' => 'sub-stable',
+            'preferred_username' => 'username',
+            'email' => 'email@e.fr',
+            'name' => 'Display Name',
+            'groups' => ['groupe-stable'],
+        ]), $this->tokens());
+
+        $this->assertSame(0, $dispatched);
     }
 }
