@@ -1,6 +1,6 @@
 # Lot 0 — Fondations · Cadrage détaillé
 
-> Lot rattaché : **`v0.1.0`** · Statut : **🚧 en cours**
+> Lot rattaché : **`v0.1.0`** · Statut : **🚧 vagues 1-2 livrées · vague 3 à attaquer · vague 4 à consolider · clôture en attente**
 >
 > Cadrage opérationnel du Lot 0. Reprend et détaille les items de [`docs/roadmap.md`](../roadmap.md) §"Lot 0", en les regroupant en vagues (sprints internes) avec critères d'acceptation et liste des issues à ouvrir.
 >
@@ -49,6 +49,8 @@ Quatre vagues séquentielles. Chaque vague est cohérente fonctionnellement et f
 
 ### Vague 1 — Squelette technique (semaine 1)
 
+> ✅ **Vague livrée.** Bootstrap Symfony, Docker dev/prod, Makefile, Tailwind via AssetMapper, layout responsive, Symfony UX (Turbo + Stimulus + Live), `.editorconfig`, `.gitattributes` — cf. PR #11 à #17.
+
 Objectif : un `make install` qui démarre la stack dev en HTTPS.
 
 - [ ] Initialiser `composer create-project symfony/skeleton`
@@ -68,6 +70,8 @@ Objectif : un `make install` qui démarre la stack dev en HTTPS.
 **Critère de fin de vague** : `make install` puis `make up` → page d'accueil affichée sur `https://spm.localhost` avec le composant Hello World fonctionnel (Turbo + Stimulus).
 
 ### Vague 2 — Authentification OIDC + projection User (semaine 2)
+
+> ✅ **Vague livrée.** Drenso/symfony-oidc-bundle configuré, entité `User` (projection Authentik), `OidcUserProvider`, filtrage `OIDC_REQUIRED_GROUPS`, services `AuthentikAvatarFetcher` et `UserAvatarResolver`, page `/profile` avec upload + préférences, filtre Twig `user|avatar` — cf. PR #29 à #33.
 
 Objectif : un user peut se connecter via Authentik et voir son profil.
 
@@ -104,6 +108,13 @@ Objectif : un admin gère les liens externes et consulte les utilisateurs.
 **Critère de fin de vague** : un admin voit la liste des users, peut CRUD les liens externes ; un user non-admin voit le menu d'outils dans le header.
 
 ### Vague 4 — Infrastructure d'audit (sans stockage) + outillage qualité + CI (semaine 3-4)
+
+> ⚠️ **À consolider.** Du code correspondant à cette vague a été poussé via les PR #34 et #35 mais la vague n'est pas considérée comme validée. Avant le tag `v0.1.0`, prévoir une passe d'audit pour :
+>
+> - Vérifier la couverture réelle de chaque item de la liste ci-dessous (tooling installé ≠ tooling effectif)
+> - Tester end-to-end : push d'une PR → CI verte < 5 min, exception forcée → ticket Sentry avec la bonne release, hooks GrumPHP qui se déclenchent en pre-commit/pre-push
+> - Vérifier le dispatch effectif des événements `AuditableEvent` dans le flux OIDC, ajouter un subscriber dev console si manquant
+> - Documenter les écarts comblés dans `CHANGELOG.md` au fil de l'eau
 
 Objectif : pipeline qualité opérationnel + classes d'événements applicatifs émises (sans persistance, vient au Lot 2).
 
@@ -144,6 +155,40 @@ Objectif : pipeline qualité opérationnel + classes d'événements applicatifs 
 - [ ] Miroir GitLab CI (`.gitlab-ci.yml`) si tu en as besoin (sinon repousser à plus tard)
 
 **Critère de fin de vague** : push d'une PR → CI verte en < 5 min ; tag `v0.1.0` → image disponible sur GHCR ; exception forcée → ticket Sentry avec release `v0.1.0`.
+
+### Vague 5 — Clôture v0.1.0
+
+Objectif : valider l'ensemble du Lot 0 et publier le premier tag stable.
+
+#### Pré-tag
+
+- [ ] Audit complet vague 4 (cf. encart ⚠️) : checklist passée item par item, écarts comblés
+- [ ] `make qa` passe sur main (CI verte sur le dernier commit avant tag)
+- [ ] Démos manuelles validées avec le PO :
+  - [ ] Login OIDC nominal
+  - [ ] Rejet `OIDC_REQUIRED_GROUPS` (compte sans groupe → page accès refusé)
+  - [ ] `/profile` : avatar cascade (upload local → Authentik → Gravatar → initiales SVG), toggle préférences
+  - [ ] `/admin` : liste utilisateurs + filtres + recherche
+  - [ ] `/admin/liens-externes` : CRUD ExternalLink
+  - [ ] Lanceur d'apps : header desktop (dropdown) + mobile (panneau plein écran)
+- [ ] `docs/local-dev.md` : un dev clone le repo à blanc, suit le doc, arrive à `make install` puis page d'accueil sur `https://spm.localhost`
+- [ ] Sentry : forcer une exception en dev → ticket apparaît avec `release=v0.1.0` (à tagger juste après)
+- [ ] `CHANGELOG.md` : déplacer toutes les entrées de `[Unreleased]` vers une section `[0.1.0] - YYYY-MM-DD`, recréer une section `[Unreleased]` vide
+
+#### Tag
+
+- [ ] Tag annoté `v0.1.0` sur main (message court reprenant la version)
+- [ ] Push du tag → déclenche `release.yml`
+- [ ] Vérifier l'image multi-arch publiée sur GHCR (`ghcr.io/kgaut/suivi-projets-mairie:v0.1.0` + `:latest`)
+- [ ] Vérifier la GitHub Release créée avec le bloc CHANGELOG `[0.1.0]`
+
+#### Post-tag
+
+- [ ] Mettre à jour `docs/lots/lot-0-cadrage.md` : statut `✅ livré`
+- [ ] Mettre à jour `docs/roadmap.md` : Lot 0 `✅ livré`, Lot 1 `🚧 en cours` (ou laisser `📅 prévu` selon planning)
+- [ ] Annoncer le tag (si applicable côté équipe / mairie)
+
+**Critère de fin de vague** : tag `v0.1.0` créé, image GHCR vérifiée, GitHub Release publiée, statut Lot 0 mis à `✅ livré` dans la roadmap.
 
 ## 4. Conventions du Lot 0
 
@@ -209,6 +254,21 @@ Rappel des conventions globales (cf. [`docs/workflow.md`](../workflow.md)) appli
 - [ ] `ci: workflow github actions lint/test/audit`
 - [ ] `ci: workflow github actions release (build + push ghcr + github release)`
 - [ ] `ci: miroir gitlab` *(optionnel selon ta priorité)*
+
+#### Consolidation vague 4 (audit du livré)
+
+- [ ] `chore: audit pipeline qualité (phpstan, cs-fixer, twig-cs-fixer, rector, deptrac, grumphp) — couverture + hooks installés`
+- [ ] `chore: audit Sentry (release tracking, filtres, test exception bout-en-bout)`
+- [ ] `chore: audit CI workflows (lint/test/audit + release.yml multi-arch)`
+- [ ] `chore: audit AuditableEvent — vérifier dispatch effectif dans le flow OIDC, ajouter subscriber dev console si manquant`
+- [ ] `chore: combler les écarts identifiés` *(issues à créer au cas par cas)*
+
+### Vague 5 — Clôture v0.1.0
+
+- [ ] `docs: validation docs/local-dev.md (clone à blanc par un dev)`
+- [ ] `chore: démos PO Lot 0`
+- [ ] `chore: tag v0.1.0 + release notes (CHANGELOG → [0.1.0])`
+- [ ] `docs: post-tag (statut Lot 0 ✅, ouverture Lot 1)`
 
 ## 7. Critère de clôture du Lot 0
 
