@@ -49,11 +49,16 @@ jobs:
       - name: Twig CS Fixer
         run: vendor/bin/twig-cs-fixer lint templates
 
+      - name: Compile container (Symfony cache:warmup)
+        # Pré-requis pour PHPStan-Symfony qui lit
+        # var/cache/dev/App_KernelDevDebugContainer.xml pour résoudre les services.
+        # Doit échouer explicitement (pas de `|| true`) si le boot du kernel
+        # casse — sinon PHPStan-Symfony se plante quelques étapes plus loin avec
+        # un message obscur.
+        run: php bin/console cache:warmup --env=dev
+
       - name: PHPStan
-        run: |
-          # Compile le container pour les checks PHPStan-Symfony
-          php bin/console cache:warmup --env=dev || true
-          vendor/bin/phpstan analyse --memory-limit=-1 --no-progress
+        run: vendor/bin/phpstan analyse --memory-limit=-1 --no-progress
 
       - name: Symfony lint:yaml
         run: php bin/console lint:yaml config --parse-tags
