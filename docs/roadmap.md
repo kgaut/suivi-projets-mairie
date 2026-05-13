@@ -10,9 +10,11 @@
 
 ## Lots planifiés
 
-### Lot 0 — Fondations · `v0.1.0` · 🚧 en cours
+### Lot 0 — Fondations · `v0.1.0` · 🚧 en cours (Vague 5 — clôture)
 
 > 📋 **Cadrage opérationnel détaillé** : [`docs/lots/lot-0-cadrage.md`](lots/lot-0-cadrage.md) (vagues, choix techniques précis, plan d'attaque côté issues, questions ouvertes spécifiques).
+>
+> Vagues 1-4 livrées (squelette + OIDC + admin + audit log + qualité + CI). Vague 5 en cours : démos PO + test Sentry + tag `v0.1.0`.
 
 Squelette technique opérationnel + section administration de base + infrastructure d'audit log. Pas encore de gestion de projets/tâches.
 
