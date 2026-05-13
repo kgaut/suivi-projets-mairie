@@ -129,6 +129,13 @@ jobs:
       - name: Install dependencies
         run: composer install ${{ env.COMPOSER_FLAGS }}
 
+      - name: Importmap install (vendor JS pour le rendu Twig en test)
+        # `importmap('app')` est appelé depuis `base.html.twig` ; sans ce
+        # téléchargement, AssetMapper jette une RuntimeError dès qu'un test
+        # fonctionnel rend un template qui étend `base.html.twig`. Pas de
+        # cache vendor à pré-télécharger ici, le cache Composer suffit.
+        run: php bin/console importmap:install --env=test
+
       - name: Doctrine schema validate
         run: |
           php bin/console doctrine:database:create --if-not-exists --env=test
