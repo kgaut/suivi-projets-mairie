@@ -34,9 +34,13 @@
                 {% endblock %}
             </nav>
 
-            {% for flash in app.flashes(['success', 'error']) %}
-                {% set color = loop.index0 == 0 ? 'green' : 'red' %}
-                <div class="mb-4 rounded-md border border-{{ color }}-200 bg-{{ color }}-50 p-3 text-sm text-{{ color }}-800">{{ flash }}</div>
+            {# `app.flashes(['success','error'])` retourne un hash
+               { 'success': [...], 'error': [...] } — d'où la double boucle. #}
+            {% for type, messages in app.flashes(['success', 'error']) %}
+                {% set color = type == 'success' ? 'green' : 'red' %}
+                {% for message in messages %}
+                    <div class="mb-4 rounded-md border border-{{ color }}-200 bg-{{ color }}-50 p-3 text-sm text-{{ color }}-800">{{ message }}</div>
+                {% endfor %}
             {% endfor %}
 
             <section>
