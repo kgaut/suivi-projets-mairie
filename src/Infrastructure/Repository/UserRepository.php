@@ -53,10 +53,14 @@ class UserRepository extends ServiceEntityRepository implements UserRepositoryIn
     /**
      * Recherche utilisateurs pour la liste admin avec filtres.
      *
-     * - `$filter->search` matche `username`, `email` ou `displayName` (case-insensitive)
-     * - `$filter->role` filtre sur les rôles JSON (`ROLE_ADMIN`, `ROLE_USER`)
-     * - `$filter->group` filtre sur l'appartenance à un groupe Authentik
-     * - `$filter->status` filtre actif/désactivé
+     * - `$filter->search` matche `username`, `email` ou `displayName` (case-insensitive, en SQL)
+     * - `$filter->status` filtre actif/désactivé (en SQL)
+     * - `$filter->role` et `$filter->group` filtrent sur des colonnes JSON
+     *   (rôles applicatifs, snapshot des groupes Authentik) : DQL n'a pas
+     *   d'opérateur JSON portable, on filtre donc en PHP après hydratation.
+     *   Acceptable tant que la base reste de l'ordre de la centaine d'users
+     *   (cas mairie). Si on a un jour besoin d'une vraie liste paginée, on
+     *   bascule sur une requête native PG `jsonb @> ARRAY[...]`.
      *
      * Tri : `displayName` ASC.
      *
@@ -71,19 +75,6 @@ class UserRepository extends ServiceEntityRepository implements UserRepositoryIn
                 ->setParameter('term', '%' . mb_strtolower($filter->search) . '%');
         }
 
-        if ($filter->role !== null && $filter->role !== '') {
-            // Doctrine 3 ne sait pas faire d'opérateur JSON portable. On reste
-            // pragmatique : LIKE sur la sérialisation JSON. Ça suffit pour
-            // ROLE_ADMIN / ROLE_USER qui sont des chaînes courtes et uniques.
-            $qb->andWhere('CAST(u.roles AS string) LIKE :role')
-                ->setParameter('role', '%"' . $filter->role . '"%');
-        }
-
-        if ($filter->group !== null && $filter->group !== '') {
-            $qb->andWhere('CAST(u.groupsSnapshot AS string) LIKE :grp')
-                ->setParameter('grp', '%"' . $filter->group . '"%');
-        }
-
         if ($filter->status === UserFilter::STATUS_ACTIVE) {
             $qb->andWhere('u.disabledAt IS NULL');
         } elseif ($filter->status === UserFilter::STATUS_DISABLED) {
@@ -92,10 +83,24 @@ class UserRepository extends ServiceEntityRepository implements UserRepositoryIn
 
         $qb->orderBy('u.displayName', 'ASC');
 
-        /** @var list<User> $result */
-        $result = $qb->getQuery()->getResult();
+        /** @var list<User> $users */
+        $users = $qb->getQuery()->getResult();
 
-        return $result;
+        if ($filter->role !== null && $filter->role !== '') {
+            $users = array_values(array_filter(
+                $users,
+                static fn (User $user): bool => in_array($filter->role, $user->getRoles(), true),
+            ));
+        }
+
+        if ($filter->group !== null && $filter->group !== '') {
+            return array_values(array_filter(
+                $users,
+                static fn (User $user): bool => in_array($filter->group, $user->getGroupsSnapshot(), true),
+            ));
+        }
+
+        return $users;
     }
 
     /**

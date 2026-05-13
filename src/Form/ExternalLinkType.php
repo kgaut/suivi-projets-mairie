@@ -43,7 +43,10 @@ final class ExternalLinkType extends AbstractType
                 'default_protocol' => 'https',
                 'constraints' => [
                     new Assert\NotBlank(),
-                    new Assert\Url(requireTld: true),
+                    // requireTld désactivé pour autoriser les hostnames sans
+                    // TLD (`http://intranet`, `http://localhost:8025`, etc.)
+                    // qui sont courants pour des outils internes auto-hébergés.
+                    new Assert\Url(requireTld: false),
                     new Assert\Length(max: 1024),
                 ],
             ])

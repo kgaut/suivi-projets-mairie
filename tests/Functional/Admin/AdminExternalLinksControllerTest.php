@@ -96,7 +96,11 @@ final class AdminExternalLinksControllerTest extends WebTestCase
 
         $form = $crawler->selectButton('Créer')->form([
             'external_link[label]' => 'Bidon',
-            'external_link[url]' => 'pas-une-url',
+            // URL avec uniquement le schéma (pas d'hôte) → rejeté par
+            // `Assert\Url`. Pas de `not-a-url` brut : `default_protocol`
+            // ferait préfixer `https://` et le validateur l'accepterait
+            // (cf. requireTld: false sur le constraint).
+            'external_link[url]' => 'https://',
             'external_link[position]' => '0',
         ]);
         $this->client->submit($form);
@@ -135,9 +139,12 @@ final class AdminExternalLinksControllerTest extends WebTestCase
         $link = $this->persistLink('Mailpit', 'http://localhost:8025');
         self::assertTrue($link->isEnabled());
 
-        $this->client->request('POST', '/admin/external-links/' . $link->getId() . '/toggle', [
-            '_token' => $this->csrfToken('external_link_toggle_' . $link->getId()->toRfc4122()),
-        ]);
+        // Le CSRF stateless de Symfony 7.4 calcule le token à partir d'une
+        // requête active — on ne peut pas le générer en dehors, donc on
+        // soumet le formulaire « Désactiver » rendu sur l'index.
+        $crawler = $this->client->request('GET', '/admin/external-links');
+        $form = $crawler->filter('form[action="/admin/external-links/' . $link->getId() . '/toggle"]')->form();
+        $this->client->submit($form);
 
         self::assertResponseRedirects('/admin/external-links');
         $this->em->clear();
@@ -150,6 +157,9 @@ final class AdminExternalLinksControllerTest extends WebTestCase
     {
         $link = $this->persistLink('Mailpit', 'http://localhost:8025');
 
+        // Première requête pour démarrer la session ; le POST direct passe
+        // ensuite avec un mauvais jeton.
+        $this->client->request('GET', '/admin/external-links');
         $this->client->request('POST', '/admin/external-links/' . $link->getId() . '/toggle', [
             '_token' => 'mauvais-token',
         ]);
@@ -162,9 +172,11 @@ final class AdminExternalLinksControllerTest extends WebTestCase
         $link = $this->persistLink('À supprimer', 'https://x.test');
         $id = $link->getId();
 
-        $this->client->request('POST', '/admin/external-links/' . $id, [
-            '_token' => $this->csrfToken('external_link_delete_' . $id->toRfc4122()),
-        ]);
+        $crawler = $this->client->request('GET', '/admin/external-links');
+        $form = $crawler->filter('form[action="/admin/external-links/' . $id . '"]')->form();
+        // Le formulaire embarque un `onsubmit="return confirm(...)"` qui ne
+        // joue pas en mode test (pas de JS) — la soumission part directe.
+        $this->client->submit($form);
 
         self::assertResponseRedirects('/admin/external-links');
         $this->em->clear();
@@ -176,6 +188,7 @@ final class AdminExternalLinksControllerTest extends WebTestCase
         $link = $this->persistLink('Protégé', 'https://x.test');
         $id = $link->getId();
 
+        $this->client->request('GET', '/admin/external-links');
         $this->client->request('POST', '/admin/external-links/' . $id, [
             '_token' => 'mauvais-token',
         ]);
@@ -194,12 +207,5 @@ final class AdminExternalLinksControllerTest extends WebTestCase
         $this->em->flush();
 
         return $link;
-    }
-
-    private function csrfToken(string $id): string
-    {
-        $manager = self::getContainer()->get('security.csrf.token_manager');
-
-        return $manager->getToken($id)->getValue();
     }
 }

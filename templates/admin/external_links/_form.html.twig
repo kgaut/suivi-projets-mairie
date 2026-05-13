@@ -1,35 +1,44 @@
-{# Partial du formulaire ExternalLink, utilisé par new + edit. #}
+{# Partial du formulaire ExternalLink, utilisé par new + edit. Les erreurs
+   sont rendues dans un wrapper qui porte la classe Tailwind, parce que
+   `form_errors(..., {attr: ...})` ne propage pas `attr` au <ul> généré. #}
+{% macro field_errors(field) %}
+    {% if field.vars.errors|length > 0 %}
+        <div class="mt-1 text-xs text-red-700">{{ form_errors(field) }}</div>
+    {% endif %}
+{% endmacro %}
+{% import _self as macros %}
+
 {{ form_start(form, {attr: {class: 'space-y-4'}}) }}
     <div>
         {{ form_label(form.label, null, {label_attr: {class: 'block text-sm text-slate-700'}}) }}
         {{ form_widget(form.label, {attr: {class: 'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm'}}) }}
-        {{ form_errors(form.label, {attr: {class: 'mt-1 text-xs text-red-700'}}) }}
+        {{ macros.field_errors(form.label) }}
     </div>
 
     <div>
         {{ form_label(form.url, null, {label_attr: {class: 'block text-sm text-slate-700'}}) }}
         {{ form_widget(form.url, {attr: {class: 'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm'}}) }}
-        {{ form_errors(form.url, {attr: {class: 'mt-1 text-xs text-red-700'}}) }}
+        {{ macros.field_errors(form.url) }}
     </div>
 
     <div class="grid gap-4 sm:grid-cols-2">
         <div>
             {{ form_label(form.icon, null, {label_attr: {class: 'block text-sm text-slate-700'}}) }}
             {{ form_widget(form.icon, {attr: {class: 'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm'}}) }}
-            {{ form_errors(form.icon, {attr: {class: 'mt-1 text-xs text-red-700'}}) }}
+            {{ macros.field_errors(form.icon) }}
         </div>
 
         <div>
             {{ form_label(form.position, null, {label_attr: {class: 'block text-sm text-slate-700'}}) }}
             {{ form_widget(form.position, {attr: {class: 'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm'}}) }}
-            {{ form_errors(form.position, {attr: {class: 'mt-1 text-xs text-red-700'}}) }}
+            {{ macros.field_errors(form.position) }}
         </div>
     </div>
 
     <div>
         {{ form_label(form.description, null, {label_attr: {class: 'block text-sm text-slate-700'}}) }}
         {{ form_widget(form.description, {attr: {class: 'mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm'}}) }}
-        {{ form_errors(form.description, {attr: {class: 'mt-1 text-xs text-red-700'}}) }}
+        {{ macros.field_errors(form.description) }}
     </div>
 
     <label class="inline-flex items-center gap-2 text-sm text-slate-700">
