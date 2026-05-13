@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Application\Event\Security\UserLoggedIn;
+use App\Application\Event\User\UserFirstSeen;
+use App\Application\Event\User\UserProfileUpdated;
 use App\Application\Service\Avatar\AuthentikAvatarFetcher;
 use App\Application\User\UserRepositoryInterface;
 use App\Domain\User;
@@ -14,6 +17,7 @@ use Drenso\OidcBundle\Security\UserProvider\OidcUserProviderInterface;
 use InvalidArgumentException;
 use Symfony\Component\Security\Core\Exception\UserNotFoundException;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Throwable;
 
 /**
@@ -37,14 +41,18 @@ final readonly class OidcUserProvider implements OidcUserProviderInterface
         private EntityManagerInterface $entityManager,
         private OidcAccessGuard $accessGuard,
         private AuthentikAvatarFetcher $avatarFetcher,
+        private EventDispatcherInterface $eventDispatcher,
         private string $adminGroup,
     ) {
     }
 
     public function ensureUserExists(string $userIdentifier, OidcUserData $userData, OidcTokens $tokens): void
     {
-        $user = $this->users->findOneByAuthentikId($userIdentifier);
-        if (!$user instanceof User) {
+        $existing = $this->users->findOneByAuthentikId($userIdentifier);
+        $isNew = !$existing instanceof User;
+        $changes = [];
+
+        if ($isNew) {
             $user = new User(
                 authentikId: $userIdentifier,
                 username: $this->resolveUsername($userData, $userIdentifier),
@@ -53,10 +61,8 @@ final readonly class OidcUserProvider implements OidcUserProviderInterface
             );
             $this->entityManager->persist($user);
         } else {
-            // Mise à jour des champs Authentik à chaque login (peuvent changer côté IdP)
-            $user->setUsername($this->resolveUsername($userData, $userIdentifier));
-            $user->setEmail($userData->getEmail());
-            $user->setDisplayName($this->resolveDisplayName($userData));
+            $user = $existing;
+            $changes = $this->updateProfile($user, $userData, $userIdentifier);
         }
 
         $groups = $this->resolveGroups($userData);
@@ -66,16 +72,78 @@ final readonly class OidcUserProvider implements OidcUserProviderInterface
 
         $this->entityManager->flush();
 
+        // Audit log (cf. specs §3.10) : émettre avant le accessGuard pour que
+        // l'historique trace la création/maj même si l'accès est ensuite rejeté.
+        if ($isNew) {
+            $this->eventDispatcher->dispatch(new UserFirstSeen(
+                subjectAuthentikId: $user->getAuthentikId(),
+                context: [
+                    'email' => $user->getEmail(),
+                    'display_name' => $user->getDisplayName(),
+                    'groups' => $groups,
+                ],
+            ));
+        } elseif ($changes !== []) {
+            $this->eventDispatcher->dispatch(new UserProfileUpdated(
+                subjectAuthentikId: $user->getAuthentikId(),
+                context: ['changes' => $changes],
+            ));
+        }
+
         // Filtrage defense in depth (cf. specs §5.3) : l'utilisateur doit
         // appartenir à au moins un des OIDC_REQUIRED_GROUPS. En cas de rejet,
         // le user est désactivé localement et une exception interrompt l'auth.
+        // L'event AccessDenied est dispatché depuis OidcAccessGuard.
         $this->accessGuard->ensureUserIsAllowed($user, $groups);
+
+        // L'auth est validée — on émet l'audit `login.success` avant les
+        // tâches non-bloquantes (fetch avatar) pour que l'event soit
+        // toujours tracé même en cas d'erreur de récupération avatar.
+        $this->eventDispatcher->dispatch(new UserLoggedIn(
+            subjectAuthentikId: $user->getAuthentikId(),
+            context: [
+                'roles' => $user->getRoles(),
+                'groups' => $groups,
+            ],
+        ));
 
         // Cache l'avatar Authentik (claim `picture`) localement si présent
         // et si pas trop ancien (TTL 24 h). Échec silencieux : ne casse
         // jamais le login (fallback Gravatar / initiales par UserAvatarResolver).
         $picture = $userData->getUserDataString('picture');
         $this->avatarFetcher->fetchIfNeeded($user, $picture !== '' ? $picture : null);
+    }
+
+    /**
+     * Met à jour les champs Authentik d'un User existant et retourne la liste
+     * des champs effectivement modifiés (pour le contexte de l'event
+     * `UserProfileUpdated`).
+     *
+     * @return list<string>
+     */
+    private function updateProfile(User $user, OidcUserData $userData, string $userIdentifier): array
+    {
+        $changes = [];
+
+        $newUsername = $this->resolveUsername($userData, $userIdentifier);
+        if ($newUsername !== $user->getUsername()) {
+            $user->setUsername($newUsername);
+            $changes[] = 'username';
+        }
+
+        $newEmail = $userData->getEmail();
+        if ($newEmail !== $user->getEmail()) {
+            $user->setEmail($newEmail);
+            $changes[] = 'email';
+        }
+
+        $newDisplayName = $this->resolveDisplayName($userData);
+        if ($newDisplayName !== $user->getDisplayName()) {
+            $user->setDisplayName($newDisplayName);
+            $changes[] = 'displayName';
+        }
+
+        return $changes;
     }
 
     public function loadOidcUser(string $userIdentifier): UserInterface

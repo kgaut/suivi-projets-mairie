@@ -19,6 +19,15 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ### Added
 
+- **Dispatch effectif des `AuditableEvent` dans le flux OIDC** — Vague 4 du Lot 0 (cf. cadrage §3 et `docs/specifications.md` §3.10). Les classes d'events posées en Vague 4 (1ère passe via PR #35) n'étaient encore branchées nulle part. Branchements :
+  - `App\Security\OidcUserProvider::ensureUserExists` dispatche `UserFirstSeen` (création d'une projection) **ou** `UserProfileUpdated` (avec la liste des champs effectivement modifiés dans `context.changes`), puis `UserLoggedIn` (avec rôles + groupes) une fois l'`OidcAccessGuard` validé. Order : audit avant accessGuard pour que la création/maj reste tracée même si l'accès est ensuite rejeté
+  - `App\Security\OidcAccessGuard::ensureUserIsAllowed` dispatche `AccessDenied` (avec `reason`, `user_groups`, `required_groups`) lors d'un rejet par filtre `OIDC_REQUIRED_GROUPS`, et `UserDisabled` uniquement si l'état actif → désactivé change effectivement (pas de doublon sur retentatives d'un compte déjà désactivé)
+  - Nouveau subscriber `App\Application\EventSubscriber\SecurityAuditSubscriber` qui traduit les events Symfony Security (`LogoutEvent`, `LoginFailureEvent`) en `UserLoggedOut` / `LoginFailed` applicatifs (avec IP client, raison, firewall, identifiant Authentik si présent dans le token)
+- **Tests** (7 nouveaux, total 83 → 90) :
+  - `App\Tests\Security\OidcUserProviderTest` : 3 nouveaux tests (`UserFirstSeen` + `UserLoggedIn` à la création, `UserProfileUpdated` avec la liste des changes, pas de dispatch profile si rien n'a changé)
+  - `App\Tests\Security\OidcAccessGuardTest` : 1 nouveau test (idempotence — pas de second `UserDisabled` si déjà désactivé)
+  - `App\Tests\Application\EventSubscriber\SecurityAuditSubscriberTest` : 4 tests (Logout avec/sans token, LoginFailure, déclaration des events souscrits)
+
 - **Section administration** (`/admin/*`, verrouillée par `ROLE_ADMIN` via `access_control` Symfony) — Vague 3 du Lot 0 :
   - **Tableau de bord** (`/admin`) : compteurs utilisateurs (total + actifs) et liens externes, raccourcis vers les sections de gestion
   - **Liste utilisateurs** (`/admin/users`) avec filtres combinables (recherche full-text sur `username`/`email`/`displayName`, rôle, groupe Authentik, statut actif/désactivé) et tri par `displayName`. Affiche les groupes Authentik en pills (3 visibles + compteur), la dernière connexion et le statut

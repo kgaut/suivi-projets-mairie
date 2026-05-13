@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Security;
 
+use App\Application\Event\Security\AccessDenied;
+use App\Application\Event\User\UserDisabled;
 use App\Domain\User;
 use Doctrine\ORM\EntityManagerInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Security\Core\Exception\CustomUserMessageAuthenticationException;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Filtrage d'accès à l'application (defense in depth, cf. specs §5.3).
@@ -31,6 +34,7 @@ final readonly class OidcAccessGuard
         string $requiredGroupsCsv,
         private EntityManagerInterface $entityManager,
         private LoggerInterface $logger,
+        private EventDispatcherInterface $eventDispatcher,
     ) {
         $this->requiredGroups = $this->parseCsv($requiredGroupsCsv);
     }
@@ -59,10 +63,31 @@ final readonly class OidcAccessGuard
             'required_groups' => $this->requiredGroups,
         ]);
 
+        $wasActive = !$user->isDisabled();
+
         // Marque l'utilisateur désactivé localement (pas de suppression — on
         // garde le sub Authentik pour préserver l'historique futur).
         $user->disable();
         $this->entityManager->flush();
+
+        $this->eventDispatcher->dispatch(new AccessDenied(
+            subjectAuthentikId: $user->getAuthentikId(),
+            context: [
+                'reason' => 'required_groups_mismatch',
+                'user_groups' => $userGroups,
+                'required_groups' => $this->requiredGroups,
+            ],
+        ));
+
+        // Émet UserDisabled uniquement si on vient effectivement de changer
+        // l'état (évite la répétition à chaque tentative d'un user déjà
+        // désactivé qui retenterait via Authentik).
+        if ($wasActive) {
+            $this->eventDispatcher->dispatch(new UserDisabled(
+                subjectAuthentikId: $user->getAuthentikId(),
+                context: ['reason' => 'required_groups_mismatch'],
+            ));
+        }
 
         throw new CustomUserMessageAuthenticationException('Accès non autorisé : votre compte n\'appartient à aucun groupe autorisé pour cette application.');
     }
