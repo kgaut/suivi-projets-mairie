@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Security;
 
 use App\Application\Service\Avatar\AuthentikAvatarFetcher;
+use App\Application\User\UserRepositoryInterface;
 use App\Domain\User;
-use App\Infrastructure\Repository\UserRepository;
 use Doctrine\ORM\EntityManagerInterface;
 use Drenso\OidcBundle\Model\OidcTokens;
 use Drenso\OidcBundle\Model\OidcUserData;
@@ -33,7 +33,7 @@ use Throwable;
 final readonly class OidcUserProvider implements OidcUserProviderInterface
 {
     public function __construct(
-        private UserRepository $users,
+        private UserRepositoryInterface $users,
         private EntityManagerInterface $entityManager,
         private OidcAccessGuard $accessGuard,
         private AuthentikAvatarFetcher $avatarFetcher,

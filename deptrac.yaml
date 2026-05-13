@@ -71,6 +71,8 @@ deptrac:
         # l'Infrastructure (`#[ORM\Entity(repositoryClass: ...)]`).
         App\Domain\User:
             - App\Infrastructure\Repository\UserRepository
+        App\Domain\ExternalLink:
+            - App\Infrastructure\Repository\ExternalLinkRepository
 
     ruleset:
         Controller:

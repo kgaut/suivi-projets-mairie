@@ -24,6 +24,7 @@
         <testsuite name="Unit">
             <directory>tests/Domain</directory>
             <directory>tests/Application</directory>
+            <directory>tests/Form</directory>
             <directory>tests/Infrastructure</directory>
             <directory>tests/Security</directory>
             <directory>tests/Twig</directory>

@@ -46,6 +46,10 @@ security:
         # accessible non-authentifié — le firewall drenso l'intercepte au callback.
         - { path: ^/login, roles: PUBLIC_ACCESS }
         - { path: ^/access-denied, roles: PUBLIC_ACCESS }
+        # Toute la section admin est verrouillée par ROLE_ADMIN.
+        # ROLE_ADMIN est attribué statiquement au login si l'user est membre de
+        # OIDC_ADMIN_GROUP (cf. OidcUserProvider::resolveRoles).
+        - { path: ^/admin, roles: ROLE_ADMIN }
         # Tout le reste exige un user authentifié — les rôles fins sont appliqués
         # par les voters (cf. specs §2 modèle de rôles dynamique)
         - { path: ^/, roles: ROLE_USER }

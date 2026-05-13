@@ -1,0 +1,47 @@
+{% extends 'base.html.twig' %}
+
+{# Layout dédié à la section /admin/*.
+   - Sidebar à gauche (rétractable < lg via la checkbox burger du header principal)
+   - Badge "Admin" sur le header
+   - Breadcrumb par défaut (Tableau de bord), surchargeable via le block.
+   Note : l'accès est verrouillé par `access_control: /admin → ROLE_ADMIN`
+   dans security.yaml (cf. specs §5.3).
+#}
+
+{% block title %}{% block admin_title %}Administration{% endblock %} — Suivi Projets Mairie{% endblock %}
+
+{% block body %}
+    <div class="border-b border-amber-200 bg-amber-50">
+        <div class="mx-auto flex max-w-6xl items-center gap-2 px-4 py-2 text-sm text-amber-900">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-4 w-4" aria-hidden="true">
+                <path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 .75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z" clip-rule="evenodd" />
+            </svg>
+            <span class="font-semibold">Mode administration</span>
+            <span aria-hidden="true">·</span>
+            <a href="{{ path('home') }}" class="underline hover:no-underline">Retour au site</a>
+        </div>
+    </div>
+
+    <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 lg:flex-row">
+        <aside class="lg:w-56 lg:shrink-0">
+            {{ include('admin/_sidebar.html.twig') }}
+        </aside>
+
+        <div class="min-w-0 flex-1">
+            <nav aria-label="Fil d'Ariane" class="mb-4 text-sm text-slate-600">
+                {% block admin_breadcrumb %}
+                    <a href="{{ path('admin_dashboard') }}" class="hover:underline">Administration</a>
+                {% endblock %}
+            </nav>
+
+            {% for flash in app.flashes(['success', 'error']) %}
+                {% set color = loop.index0 == 0 ? 'green' : 'red' %}
+                <div class="mb-4 rounded-md border border-{{ color }}-200 bg-{{ color }}-50 p-3 text-sm text-{{ color }}-800">{{ flash }}</div>
+            {% endfor %}
+
+            <section>
+                {% block admin_body %}{% endblock %}
+            </section>
+        </div>
+    </div>
+{% endblock %}
