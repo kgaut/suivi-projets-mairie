@@ -17,6 +17,11 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ## [Unreleased]
 
+### Changed
+
+- **`docs/lots/lot-0-cadrage.md` mis à jour** : Vagues 1-4 marquées livrées (avec références aux PR), Vague 5 (clôture v0.1.0) en cours. Détaille la checklist de démos manuelles PO + les vérifications observabilité (Sentry exception forcée, `debug:event-dispatcher`, tail Monolog au login)
+- **`docs/roadmap.md` mis à jour** : Lot 0 indiqué "Vagues 1-4 livrées, Vague 5 en cours". Restera à passer à `✅ livré` au moment du tag `v0.1.0`
+
 ### Added
 
 - **Dispatch effectif des `AuditableEvent` dans le flux OIDC** — Vague 4 du Lot 0 (cf. cadrage §3 et `docs/specifications.md` §3.10). Les classes d'events posées en Vague 4 (1ère passe via PR #35) n'étaient encore branchées nulle part. Branchements :

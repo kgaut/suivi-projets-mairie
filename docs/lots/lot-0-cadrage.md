@@ -1,6 +1,6 @@
 # Lot 0 — Fondations · Cadrage détaillé
 
-> Lot rattaché : **`v0.1.0`** · Statut : **🚧 vagues 1-2 livrées · vague 3 à attaquer · vague 4 à consolider · clôture en attente**
+> Lot rattaché : **`v0.1.0`** · Statut : **🚧 vagues 1-4 livrées · vague 5 (clôture v0.1.0) en cours**
 >
 > Cadrage opérationnel du Lot 0. Reprend et détaille les items de [`docs/roadmap.md`](../roadmap.md) §"Lot 0", en les regroupant en vagues (sprints internes) avec critères d'acceptation et liste des issues à ouvrir.
 >
@@ -93,66 +93,74 @@ Objectif : un user peut se connecter via Authentik et voir son profil.
 
 ### Vague 3 — Section administration de base (semaine 3)
 
+> ✅ **Vague livrée.** Layout admin (sidebar/breadcrumb/badge), `access_control: /admin → ROLE_ADMIN`, tableau de bord avec compteurs, liste utilisateurs avec filtres combinables (search full-text + rôle + groupe Authentik + statut), fiche utilisateur avec lien Authentik, entité `ExternalLink` + migration + CRUD admin complet, composant lanceur d'apps (dropdown desktop / panneau mobile, Stimulus toggle). Cf. PR #39 + sous-PR #40 (fixes tests fonctionnels) + #41 (CI tailwind:build). Refactor d'archi : ports applicatifs `UserRepositoryInterface` / `ExternalLinkRepositoryInterface` introduits.
+
 Objectif : un admin gère les liens externes et consulte les utilisateurs.
 
-- [ ] Layout admin distinct (sidebar, breadcrumb, badge "Admin")
-- [ ] Voter de base : `ROLE_ADMIN` requis pour `/admin/*`
-- [ ] Liste des utilisateurs : nom, email, groupes Authentik, rôles dérivés, dernière connexion, statut actif/désactivé, lien vers la fiche Authentik
-- [ ] Tri et filtres (par rôle, par groupe Authentik, recherche full-text sur nom/email)
-- [ ] Détail utilisateur : historique de connexions, espace réservé pour les contributions futures
-- [ ] **Gestion des liens externes** (entité `ExternalLink`) : CRUD admin (libellé, URL, icône, description, position, actif/inactif). Pas de restriction par rôle (cf. specs §3.12)
-- [ ] **Composant Twig "lanceur d'apps"** dans le header (icône grille → dropdown desktop / panneau plein-écran mobile)
-- [ ] Lecture des `ExternalLink` actifs (visibles par tout utilisateur authentifié)
-- [ ] Cible `_blank` + `rel="noopener noreferrer"`
+- [x] Layout admin distinct (sidebar, breadcrumb, badge "Admin")
+- [x] Voter de base : `ROLE_ADMIN` requis pour `/admin/*` (via `access_control` Symfony)
+- [x] Liste des utilisateurs : nom, email, groupes Authentik, rôles dérivés, dernière connexion, statut actif/désactivé, lien vers la fiche Authentik
+- [x] Tri et filtres (par rôle, par groupe Authentik, recherche full-text sur nom/email)
+- [x] Détail utilisateur : identifiants Authentik, groupes complets, dates, statut — historique des contributions à venir au Lot 1
+- [x] **Gestion des liens externes** (entité `ExternalLink`) : CRUD admin (libellé, URL, icône, description, position, actif/inactif). Pas de restriction par rôle (cf. specs §3.12)
+- [x] **Composant Twig "lanceur d'apps"** dans le header (icône grille → dropdown desktop / panneau plein-écran mobile)
+- [x] Lecture des `ExternalLink` actifs (visibles par tout utilisateur authentifié)
+- [x] Cible `_blank` + `rel="noopener noreferrer"`
 
 **Critère de fin de vague** : un admin voit la liste des users, peut CRUD les liens externes ; un user non-admin voit le menu d'outils dans le header.
 
 ### Vague 4 — Infrastructure d'audit (sans stockage) + outillage qualité + CI (semaine 3-4)
 
-> ⚠️ **À consolider.** Du code correspondant à cette vague a été poussé via les PR #34 et #35 mais la vague n'est pas considérée comme validée. Avant le tag `v0.1.0`, prévoir une passe d'audit pour :
+> ✅ **Vague livrée (en deux temps).**
 >
-> - Vérifier la couverture réelle de chaque item de la liste ci-dessous (tooling installé ≠ tooling effectif)
-> - Tester end-to-end : push d'une PR → CI verte < 5 min, exception forcée → ticket Sentry avec la bonne release, hooks GrumPHP qui se déclenchent en pre-commit/pre-push
-> - Vérifier le dispatch effectif des événements `AuditableEvent` dans le flux OIDC, ajouter un subscriber dev console si manquant
-> - Documenter les écarts comblés dans `CHANGELOG.md` au fil de l'eau
+> - **1ère passe (Vague 4-A)** : tooling posé via les PR #34 et #35 — interface `AuditableEvent`, 8 classes d'events `security`/`user`, subscriber `AuditableEventLogger`, GrumPHP, Sentry, workflows CI/Release, outillage qualité (PHPStan, CS Fixer, Rector, Deptrac, Twig CS Fixer).
+> - **2ème passe (Vague 4-B)** : dispatch effectif et stabilisation via PR #38 (fix CI `cache:warmup`), #40 (fix tests fonctionnels), #41 (fix tailwind:build en CI) et **PR #42** (dispatch des `AuditableEvent` dans `OidcUserProvider` / `OidcAccessGuard` + nouveau `SecurityAuditSubscriber` pour LogoutEvent/LoginFailureEvent).
+>
+> Vérifications restant à faire **manuellement** par le PO avant le tag `v0.1.0` (cf. Vague 5) :
+>
+> - Forcer une exception en dev → ticket apparaît dans Sentry avec le bon `release` (`APP_VERSION`)
+> - `git commit --allow-empty` en dev → hooks GrumPHP pre-commit s'exécutent (composer + phpcsfixer + twigcsfixer + yamllint)
+> - `bin/console debug:event-dispatcher | grep -i audit` → confirme que `AuditableEventLogger` et `SecurityAuditSubscriber` sont enregistrés
+> - Login OIDC dev → tail des logs Monolog → events `user.first_seen` ou `user.profile.updated` puis `security.login.success` visibles
 
 Objectif : pipeline qualité opérationnel + classes d'événements applicatifs émises (sans persistance, vient au Lot 2).
 
 #### Audit log (préparation)
 
-- [ ] Interface `AuditableEvent` dans `Application/Event/`
-- [ ] Classes pour la catégorie `security` : `UserLoggedIn`, `UserLoggedOut`, `LoginFailed`, `AccessDenied`, `SessionExpired`
-- [ ] Classes pour la catégorie `user` : `UserFirstSeen`, `UserProfileUpdated`, `UserDisabled`
-- [ ] Dispatch via Symfony EventDispatcher dans le code de sécurité OIDC
-- [ ] Subscriber `dev` qui log dans la console (pour vérification)
+- [x] Interface `AuditableEvent` dans `Application/Event/`
+- [x] Classes pour la catégorie `security` : `UserLoggedIn`, `UserLoggedOut`, `LoginFailed`, `AccessDenied`, `SessionExpired`
+- [x] Classes pour la catégorie `user` : `UserFirstSeen`, `UserProfileUpdated`, `UserDisabled`
+- [x] Dispatch via Symfony EventDispatcher dans le code de sécurité OIDC (PR #42 — `OidcUserProvider` + `OidcAccessGuard` + nouveau `SecurityAuditSubscriber` pour `LogoutEvent`/`LoginFailureEvent`). `SessionExpired` reste non câblé (sessions Redis = Lot 2)
+- [x] Subscriber `dev` qui log dans la console (`AuditableEventLogger` log dans le canal Monolog standard)
 
 #### Outillage qualité
 
-- [ ] `phpstan.neon.dist` (level 9 + extensions Symfony, Doctrine)
-- [ ] `phpunit.dist.xml` + base de test `spm_test` recréée à chaque run
-- [ ] `.php-cs-fixer.dist.php` (preset Symfony + PHP84Migration)
-- [ ] `.twig-cs-fixer.dist.php`
-- [ ] `rector.php` (sets Symfony, Doctrine, PHP 8.4)
-- [ ] `deptrac.yaml` (couches Controller / Application / Domain / Infrastructure)
-- [ ] `grumphp.yml` avec hooks pre-commit (phpcsfixer, twigcsfixer, twig lint, yamllint, composer) et pre-push (phpstan, securitychecker)
-- [ ] Hook git auto-installé via `composer install`
+- [x] `phpstan.neon.dist` (level 9 + extensions Symfony, Doctrine, PHPUnit auto-installées via `phpstan/extension-installer`)
+- [x] `phpunit.dist.xml` + base de test `spm_test` recréée à chaque run en CI
+- [x] `.php-cs-fixer.dist.php` (preset Symfony + Symfony:risky + PSR-12 + `@PHP84Migration` + `@PHPUnit100Migration:risky`)
+- [x] `.twig-cs-fixer.dist.php`
+- [x] `rector.php` (sets Symfony, Doctrine, PHP 8.4 + `withPreparedSets`)
+- [x] `deptrac.yaml` (couches Controller / Application / Domain / Infrastructure / Security / Twig / DataFixtures / Vendor + ruleset strict + 2 skips documentés pour `repositoryClass` Doctrine)
+- [x] `grumphp.yml` avec hooks pre-commit (composer + phpcsfixer + twigcsfixer + yamllint) et testsuite prepush (phpstan + securitychecker_symfony)
+- [x] Hook git auto-installé via `composer install`
 
 #### Sentry
 
-- [ ] Bundle `sentry/sentry-symfony` installé
-- [ ] `config/packages/sentry.yaml` selon `docs/qualite.md` §10.1
-- [ ] Variables `SENTRY_DSN`, `SENTRY_ENV`, `APP_VERSION`
-- [ ] Filtrage `NotFoundHttpException`, `AccessDeniedException` (logs locaux uniquement)
-- [ ] Test manuel : forcer une exception en dev, vérifier qu'elle apparaît dans Sentry
+- [x] Bundle `sentry/sentry-symfony` installé
+- [x] `config/packages/sentry.yaml` (DSN, env, release via `APP_VERSION`, `send_default_pii: false`, traces 10 %, filtrage `NotFoundHttpException`/`AccessDeniedException`, désactivé en test)
+- [x] Variables `SENTRY_DSN`, `SENTRY_ENV`, `APP_VERSION`
+- [x] Filtrage `NotFoundHttpException`, `AccessDeniedException` (logs locaux uniquement)
+- [ ] **Test manuel à faire avant tag v0.1.0** : forcer une exception en dev, vérifier qu'elle apparaît dans Sentry
 
 #### CI
 
-- [ ] Workflow `.github/workflows/ci.yml` : 3 jobs en parallèle (`lint`, `test`, `audit`)
-  - `lint` : composer install + php-cs-fixer --dry-run + twig-cs-fixer --dry-run + phpstan + lint:twig + lint:yaml + lint:container + deptrac
-  - `test` : services postgres + redis + composer install + doctrine:schema:validate + doctrine:migrations:migrate + phpunit
+- [x] Workflow `.github/workflows/ci.yml` : 3 jobs en parallèle (`lint`, `test`, `audit`)
+  - `lint` : composer install + php-cs-fixer --dry-run + twig-cs-fixer + cache:warmup + phpstan + lint:yaml + lint:twig + lint:container + deptrac
+  - `test` : services postgres + redis + composer install + importmap:install + tailwind:build + doctrine setup + phpunit
   - `audit` : composer audit + rector --dry-run
-- [ ] Workflow `.github/workflows/release.yml` : sur tag `v*.*.*`, build multi-arch, push GHCR avec tags `v0.1.0` + `latest`, création GitHub Release avec changelog
-- [ ] Miroir GitLab CI (`.gitlab-ci.yml`) si tu en as besoin (sinon repousser à plus tard)
+- [x] Workflow `.github/workflows/release.yml` : sur tag `v*.*.*`, build multi-arch (amd64+arm64), push GHCR avec tags semver + `latest`, création GitHub Release avec extraction CHANGELOG
+- [ ] **À tester avant v0.1.0** : pousser un tag dry-run (e.g. `v0.1.0-alpha.3`) → vérifier que le workflow release tourne jusqu'au bout et publie l'image
+- [ ] Miroir GitLab CI (`.gitlab-ci.yml`) — repoussé au Lot 1 si besoin
 
 **Critère de fin de vague** : push d'une PR → CI verte en < 5 min ; tag `v0.1.0` → image disponible sur GHCR ; exception forcée → ticket Sentry avec release `v0.1.0`.
 
@@ -162,18 +170,49 @@ Objectif : valider l'ensemble du Lot 0 et publier le premier tag stable.
 
 #### Pré-tag
 
-- [ ] Audit complet vague 4 (cf. encart ⚠️) : checklist passée item par item, écarts comblés
-- [ ] `make qa` passe sur main (CI verte sur le dernier commit avant tag)
-- [ ] Démos manuelles validées avec le PO :
-  - [ ] Login OIDC nominal
-  - [ ] Rejet `OIDC_REQUIRED_GROUPS` (compte sans groupe → page accès refusé)
-  - [ ] `/profile` : avatar cascade (upload local → Authentik → Gravatar → initiales SVG), toggle préférences
-  - [ ] `/admin` : liste utilisateurs + filtres + recherche
-  - [ ] `/admin/liens-externes` : CRUD ExternalLink
-  - [ ] Lanceur d'apps : header desktop (dropdown) + mobile (panneau plein écran)
-- [ ] `docs/local-dev.md` : un dev clone le repo à blanc, suit le doc, arrive à `make install` puis page d'accueil sur `https://spm.localhost`
-- [ ] Sentry : forcer une exception en dev → ticket apparaît avec `release=v0.1.0` (à tagger juste après)
-- [ ] `CHANGELOG.md` : déplacer toutes les entrées de `[Unreleased]` vers une section `[0.1.0] - YYYY-MM-DD`, recréer une section `[Unreleased]` vide
+- [x] Audit Vague 4 complété (cf. encart Vague 4 ci-dessus) — dispatch effectif livré par PR #42
+- [x] `make qa` passe en local + CI verte sur le dernier commit (PR #39 + sous-PR #40, #41, #42 mergées)
+
+##### Démos manuelles à valider avec le PO (sur instance dev)
+
+À exécuter par le PO en suivant exactement les étapes, et à cocher au fur et à mesure :
+
+- [ ] **Login OIDC nominal**
+  - `make up`, ouvrir `https://spm.localhost`
+  - Cliquer "Se connecter" → redirection Authentik → renseigner un compte membre de `OIDC_REQUIRED_GROUPS`
+  - Retour sur l'app, header affiche l'avatar + le nom complet
+- [ ] **Rejet `OIDC_REQUIRED_GROUPS`** (compte sans groupe → page accès refusé)
+  - Se connecter avec un compte Authentik qui n'est dans aucun groupe requis
+  - L'auth aboutit sur `/access-denied` avec le message dédié (et le user local est marqué `disabledAt`)
+- [ ] **`/profile`** : cascade avatar (upload local → Authentik → Gravatar → initiales SVG)
+  - Sans rien uploader : l'avatar doit refléter (a) le claim `picture` d'Authentik si présent, (b) sinon Gravatar si l'opt-in est ON, (c) sinon les initiales SVG colorées
+  - Toggle `gravatarAllowed` à OFF → vérifier que l'avatar tombe sur les initiales
+  - Upload d'un PNG ≤ 2 Mo → vérifier que l'avatar local prend le pas
+- [ ] **`/admin`** (avec un compte `ROLE_ADMIN`)
+  - Dashboard : compteurs cohérents
+  - `/admin/users` : tous les users affichés, filtres recherche/rôle/groupe/statut fonctionnels
+  - Cliquer sur un user → fiche détail avec bouton « Ouvrir dans Authentik ↗ »
+- [ ] **`/admin/external-links`** : CRUD ExternalLink
+  - Créer un lien (label + URL HTTPS interne)
+  - Le voir apparaître dans le lanceur d'apps du header
+  - Toggle off → vérifier la disparition du lanceur
+  - Modifier le libellé → vérifier la maj
+  - Supprimer (avec confirmation JS) → vérifier la disparition de la liste admin
+- [ ] **Lanceur d'apps** : header desktop (dropdown) + mobile (panneau plein écran)
+  - Desktop (≥ `lg`) : icône grille → dropdown 2 colonnes
+  - Mobile (< `lg`) : panneau plein écran après burger
+  - Clic-outside et touche Escape ferment le dropdown
+- [ ] **`docs/local-dev.md`** : un dev clone le repo à blanc, suit le doc, arrive à `make install` puis page d'accueil sur `https://spm.localhost`
+
+##### Vérifications observabilité
+
+- [ ] **Sentry** : `bin/console app:simulate-error` ou ajouter un `throw new \RuntimeException` temporaire dans un contrôleur dev → ticket apparaît dans Sentry avec `release = $APP_VERSION` (tag v0.1.0)
+- [ ] **Audit log** : `bin/console debug:event-dispatcher` montre `AuditableEventLogger` listening sur les 8 events + `SecurityAuditSubscriber` sur `LogoutEvent`/`LoginFailureEvent`. Tail Monolog pendant un login : événements `user.first_seen|profile.updated` puis `security.login.success` visibles
+
+##### CHANGELOG
+
+- [ ] Déplacer toutes les entrées de `[Unreleased]` vers une section `[0.1.0] - YYYY-MM-DD` (date du tag)
+- [ ] Recréer une section `[Unreleased]` vide pour la suite
 
 #### Tag
 
