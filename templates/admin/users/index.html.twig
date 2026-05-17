@@ -1,0 +1,131 @@
+{% extends 'admin/_layout.html.twig' %}
+
+{% block admin_title %}Utilisateurs{% endblock %}
+
+{% block admin_breadcrumb %}
+    <a href="{{ path('admin_dashboard') }}" class="hover:underline">Administration</a>
+    <span aria-hidden="true">›</span>
+    <span aria-current="page">Utilisateurs</span>
+{% endblock %}
+
+{% block admin_body %}
+    <header class="flex flex-wrap items-baseline justify-between gap-2">
+        <h1 class="text-2xl font-bold text-slate-900">Utilisateurs</h1>
+        <p class="text-sm text-slate-500">{{ users|length }} résultat{{ users|length > 1 ? 's' : '' }}</p>
+    </header>
+
+    <form method="get" action="{{ path('admin_users_index') }}" class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <label class="text-sm sm:col-span-2">
+            <span class="block text-slate-700">Recherche (nom, e-mail)</span>
+            <input
+                type="search"
+                name="q"
+                value="{{ filter.search ?? '' }}"
+                placeholder="ex. dupont"
+                class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            >
+        </label>
+
+        <label class="text-sm">
+            <span class="block text-slate-700">Rôle</span>
+            <select name="role" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="">Tous</option>
+                {% for role in roles %}
+                    <option value="{{ role }}" {{ filter.role == role ? 'selected' }}>{{ role }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label class="text-sm">
+            <span class="block text-slate-700">Groupe Authentik</span>
+            <select name="group" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="">Tous</option>
+                {% for group in known_groups %}
+                    <option value="{{ group }}" {{ filter.group == group ? 'selected' }}>{{ group }}</option>
+                {% endfor %}
+            </select>
+        </label>
+
+        <label class="text-sm">
+            <span class="block text-slate-700">Statut</span>
+            <select name="status" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm">
+                <option value="all" {{ filter.status == 'all' ? 'selected' }}>Tous</option>
+                <option value="active" {{ filter.status == 'active' ? 'selected' }}>Actifs</option>
+                <option value="disabled" {{ filter.status == 'disabled' ? 'selected' }}>Désactivés</option>
+            </select>
+        </label>
+
+        <div class="flex items-end gap-2 sm:col-span-2 lg:col-span-5">
+            <button type="submit" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">
+                Filtrer
+            </button>
+            {% if not filter.empty %}
+                <a href="{{ path('admin_users_index') }}" class="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                    Réinitialiser
+                </a>
+            {% endif %}
+        </div>
+    </form>
+
+    <div class="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                    <th class="px-3 py-2">Utilisateur</th>
+                    <th class="px-3 py-2">E-mail</th>
+                    <th class="px-3 py-2">Rôles</th>
+                    <th class="px-3 py-2">Groupes</th>
+                    <th class="px-3 py-2">Dernière connexion</th>
+                    <th class="px-3 py-2">Statut</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for user in users %}
+                    <tr>
+                        <td class="px-3 py-2">
+                            <a href="{{ path('admin_users_show', {id: user.id}) }}" class="flex items-center gap-2 text-indigo-700 hover:underline">
+                                {{ user|avatar(24) }}
+                                <span class="font-medium">{{ user.displayName }}</span>
+                            </a>
+                            <div class="text-xs text-slate-500">@{{ user.username }}</div>
+                        </td>
+                        <td class="px-3 py-2 text-slate-700">{{ user.email }}</td>
+                        <td class="px-3 py-2">
+                            <div class="flex flex-wrap gap-1">
+                                {% for role in user.roles %}
+                                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{{ role }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td class="px-3 py-2">
+                            <div class="flex flex-wrap gap-1">
+                                {% for group in user.groupsSnapshot|slice(0, 3) %}
+                                    <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700">{{ group }}</span>
+                                {% endfor %}
+                                {% if user.groupsSnapshot|length > 3 %}
+                                    <span class="text-xs text-slate-500">+{{ user.groupsSnapshot|length - 3 }}</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td class="px-3 py-2 text-slate-700">
+                            {{ user.lastLoginAt ? user.lastLoginAt|date('d/m/Y H:i') : '—' }}
+                        </td>
+                        <td class="px-3 py-2">
+                            {% if user.disabled %}
+                                <span class="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">Désactivé</span>
+                            {% else %}
+                                <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Actif</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="px-3 py-8 text-center text-sm text-slate-500">
+                            Aucun utilisateur ne correspond aux filtres.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

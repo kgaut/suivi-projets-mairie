@@ -17,8 +17,41 @@ Les sections possibles sous chaque version sont, dans l'ordre :
 
 ## [Unreleased]
 
+### Changed
+
+- **`docs/lots/lot-0-cadrage.md` mis à jour** : Vagues 1-4 marquées livrées (avec références aux PR), Vague 5 (clôture v0.1.0) en cours. Détaille la checklist de démos manuelles PO + les vérifications observabilité (Sentry exception forcée, `debug:event-dispatcher`, tail Monolog au login)
+- **`docs/roadmap.md` mis à jour** : Lot 0 indiqué "Vagues 1-4 livrées, Vague 5 en cours". Restera à passer à `✅ livré` au moment du tag `v0.1.0`
+
 ### Added
 
+- **Dispatch effectif des `AuditableEvent` dans le flux OIDC** — Vague 4 du Lot 0 (cf. cadrage §3 et `docs/specifications.md` §3.10). Les classes d'events posées en Vague 4 (1ère passe via PR #35) n'étaient encore branchées nulle part. Branchements :
+  - `App\Security\OidcUserProvider::ensureUserExists` dispatche `UserFirstSeen` (création d'une projection) **ou** `UserProfileUpdated` (avec la liste des champs effectivement modifiés dans `context.changes`), puis `UserLoggedIn` (avec rôles + groupes) une fois l'`OidcAccessGuard` validé. Order : audit avant accessGuard pour que la création/maj reste tracée même si l'accès est ensuite rejeté
+  - `App\Security\OidcAccessGuard::ensureUserIsAllowed` dispatche `AccessDenied` (avec `reason`, `user_groups`, `required_groups`) lors d'un rejet par filtre `OIDC_REQUIRED_GROUPS`, et `UserDisabled` uniquement si l'état actif → désactivé change effectivement (pas de doublon sur retentatives d'un compte déjà désactivé)
+  - Nouveau subscriber `App\Application\EventSubscriber\SecurityAuditSubscriber` qui traduit les events Symfony Security (`LogoutEvent`, `LoginFailureEvent`) en `UserLoggedOut` / `LoginFailed` applicatifs (avec IP client, raison, firewall, identifiant Authentik si présent dans le token)
+- **Tests** (7 nouveaux, total 83 → 90) :
+  - `App\Tests\Security\OidcUserProviderTest` : 3 nouveaux tests (`UserFirstSeen` + `UserLoggedIn` à la création, `UserProfileUpdated` avec la liste des changes, pas de dispatch profile si rien n'a changé)
+  - `App\Tests\Security\OidcAccessGuardTest` : 1 nouveau test (idempotence — pas de second `UserDisabled` si déjà désactivé)
+  - `App\Tests\Application\EventSubscriber\SecurityAuditSubscriberTest` : 4 tests (Logout avec/sans token, LoginFailure, déclaration des events souscrits)
+
+- **Section administration** (`/admin/*`, verrouillée par `ROLE_ADMIN` via `access_control` Symfony) — Vague 3 du Lot 0 :
+  - **Tableau de bord** (`/admin`) : compteurs utilisateurs (total + actifs) et liens externes, raccourcis vers les sections de gestion
+  - **Liste utilisateurs** (`/admin/users`) avec filtres combinables (recherche full-text sur `username`/`email`/`displayName`, rôle, groupe Authentik, statut actif/désactivé) et tri par `displayName`. Affiche les groupes Authentik en pills (3 visibles + compteur), la dernière connexion et le statut
+  - **Fiche utilisateur** (`/admin/users/{id}`) : identifiants Authentik, rôles, groupes complets, dates de création / dernière connexion, statut. Bouton « Ouvrir dans Authentik ↗ » construit depuis `OIDC_WELL_KNOWN_URL` (recherche sur le `sub`). Espace réservé pour l'historique des contributions (Lot 1+)
+  - **Layout admin dédié** (`templates/admin/_layout.html.twig` + `_sidebar.html.twig`) : sidebar avec items actifs détectés via le `_route` courant, badge « Mode administration » + lien de retour, breadcrumb surchargeable par bloc, gestion des flashs `success`/`error`
+- **Gestion des liens externes** (entité `App\Domain\ExternalLink`, table `external_links`, migration `Version20260512090000`) : CRUD admin complet (`/admin/external-links/{,new,{id}/edit,{id}/toggle,{id}}`) avec validation Symfony Form (label 1-64 chars, URL HTTPS via `Assert\Url`, position ≥ 0). Toggle et delete protégés par jeton CSRF par-lien. Cf. specs §3.12 et `docs/modele-de-donnees.md` §3.12
+- **Composant « lanceur d'apps »** dans le header (`templates/_partials/_app_launcher.html.twig`) : icône grille → dropdown desktop / panneau plein-écran mobile, grille 2 colonnes avec icône (emoji ou première lettre du libellé) + libellé tronqué. Liens en `target="_blank" rel="noopener noreferrer"` et tooltip via `title`. Visible uniquement si l'user est authentifié ET qu'il existe au moins un lien actif. Stimulus controller `app_launcher` (toggle, clic-outside, touche Escape) sur le même modèle que `user_menu`
+- **Extension Twig `app_launcher_links()`** (`App\Twig\AppLauncherExtension`) qui expose les liens actifs au template via l'interface applicative — découpe l'accès depuis Twig
+- **Ports applicatifs Repository** (`App\Application\User\UserRepositoryInterface`, `App\Application\ExternalLink\ExternalLinkRepositoryInterface`) implémentés par les repositories Doctrine. Les contrôleurs et la Twig extension dépendent désormais de ces interfaces — alignement sur le pattern existant `AttachmentStorageInterface`, isolation Application ⇏ Infrastructure (cf. `docs/qualite.md` §3). Aliases déclarés dans `config/services.yaml`
+- **DTO de filtre `App\Application\User\UserFilter`** : construit depuis la query string par `fromQuery()` (normalise les valeurs vides en `null`, valide le statut), constantes `STATUS_ALL` / `STATUS_ACTIVE` / `STATUS_DISABLED`
+- **Tests** :
+  - Unit `App\Tests\Domain\ExternalLinkTest` (5 tests : défauts, UUID v7, setters qui bumpent `updatedAt`, idempotence enable/disable, nullable explicite)
+  - Unit `App\Tests\Application\User\UserFilterTest` (5 tests : défauts, normalisation, statut inconnu, chaînes vides, types non-string)
+  - Unit `App\Tests\Form\ExternalLinkInputTest` (4 tests : `fromEntity`, `applyTo` avec normalisation, `toNewEntity`, échec pré-condition)
+  - Unit `App\Tests\Twig\AppLauncherExtensionTest` (2 tests : délégation au port, fonction Twig exposée)
+  - Functional `App\Tests\Functional\Admin\AdminAccessTest` (4 tests : redirection anonyme, 403 non-admin, 200 admin sur dashboard + sous-sections)
+  - Functional `App\Tests\Functional\Admin\AdminUsersControllerTest` (5 tests : liste complète, filtre recherche, filtre statut, filtre rôle, fiche détail)
+  - Functional `App\Tests\Functional\Admin\AdminExternalLinksControllerTest` (8 tests : index avec liens, état vide, création, validation URL, édition, toggle, delete, rejet CSRF sur toggle et delete)
+- **Dépendances** : `symfony/form` ^7.4 + `symfony/validator` ^7.4 (CRUD admin)
 - **Outillage qualité branché à la racine** : `phpstan.neon.dist` (level 9 + extensions Symfony / Doctrine / PHPUnit auto-installées via `phpstan/extension-installer`), `.php-cs-fixer.dist.php` (preset Symfony + Symfony:risky + PSR-12 + `@PHP84Migration` + `@PHPUnit100Migration:risky` ; `yoda_style` désactivé volontairement), `rector.php` (`withPhpSets(php84: true)` + `withComposerBased(symfony, doctrine, phpunit)` + `withPreparedSets(deadCode, codeQuality, codingStyle, typeDeclarations, privatization, earlyReturn, instanceOf)`), `.twig-cs-fixer.dist.php` (standards Twig CS Fixer + Symfony), `deptrac.yaml` (couches Controller / Application / Domain / Infrastructure / Security / Twig / DataFixtures / Vendor avec ruleset strict `Controller→Application→Domain` et tolérance documentée `Domain→Infrastructure` pour `#[ORM\Entity(repositoryClass)]`)
 - **GrumPHP** (`phpro/grumphp` ^2.20) : `grumphp.yml` à la racine. Hooks pre-commit (composer + phpcsfixer + twigcsfixer + yamllint) et testsuite prepush (phpstan + securitychecker_symfony). Hook git auto-installé via `composer install`. Contournement ponctuel via `git commit --no-verify`
 - **Sentry** (`sentry/sentry-symfony` ^5.10) : bundle enregistré dans `config/bundles.php`, `config/packages/sentry.yaml` (DSN via `SENTRY_DSN`, environment via `SENTRY_ENV`, release via `APP_VERSION`, `send_default_pii: false` pour le RGPD, traces 10 %, profiling désactivé v1, `NotFoundHttpException` et `AccessDeniedException` filtrés des envois Sentry, capture Messenger activée). Override `when@test` qui désactive Sentry sur la testsuite

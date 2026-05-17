@@ -1,0 +1,47 @@
+{# Lanceur d'apps : icône grille → dropdown desktop / panneau mobile.
+   Visible uniquement pour les utilisateurs authentifiés. La liste vient
+   de `app_launcher_links()` (cf. App\Twig\AppLauncherExtension). #}
+{% set links = app.user is not null ? app_launcher_links() : [] %}
+{% if links is not empty %}
+    <div class="relative" data-controller="app-launcher">
+        <button
+            type="button"
+            data-app-launcher-target="button"
+            data-action="click->app-launcher#toggle"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-label="Ouvrir le lanceur d'apps"
+            class="grid h-10 w-10 place-items-center rounded-md text-slate-600 hover:bg-slate-100"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="h-5 w-5" aria-hidden="true">
+                <path d="M4.5 6.375a1.875 1.875 0 1 1 3.75 0 1.875 1.875 0 0 1-3.75 0Zm7.125 0a1.875 1.875 0 1 1 3.75 0 1.875 1.875 0 0 1-3.75 0ZM4.5 13.5a1.875 1.875 0 1 1 3.75 0 1.875 1.875 0 0 1-3.75 0Zm7.125 0a1.875 1.875 0 1 1 3.75 0 1.875 1.875 0 0 1-3.75 0Z" />
+            </svg>
+        </button>
+
+        <div
+            data-app-launcher-target="menu"
+            role="menu"
+            aria-label="Liens externes"
+            class="absolute right-0 z-50 mt-2 hidden w-64 origin-top-right rounded-md border border-slate-200 bg-white p-2 shadow-lg focus:outline-none"
+        >
+            <p class="px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Outils internes</p>
+            <ul class="grid grid-cols-2 gap-1">
+                {% for link in links %}
+                    <li>
+                        <a
+                            href="{{ link.url }}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="{{ link.description }}"
+                            role="menuitem"
+                            class="flex h-20 flex-col items-center justify-center gap-1 rounded-md p-2 text-center hover:bg-slate-50"
+                        >
+                            <span aria-hidden="true" class="grid h-9 w-9 place-items-center rounded-md bg-slate-100 text-lg">{{ link.icon ?: link.label|first|upper }}</span>
+                            <span class="line-clamp-2 text-xs font-medium text-slate-700">{{ link.label }}</span>
+                        </a>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endif %}

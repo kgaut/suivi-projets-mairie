@@ -1,0 +1,98 @@
+{% extends 'admin/_layout.html.twig' %}
+
+{% block admin_title %}Liens externes{% endblock %}
+
+{% block admin_breadcrumb %}
+    <a href="{{ path('admin_dashboard') }}" class="hover:underline">Administration</a>
+    <span aria-hidden="true">›</span>
+    <span aria-current="page">Liens externes</span>
+{% endblock %}
+
+{% block admin_body %}
+    <header class="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+            <h1 class="text-2xl font-bold text-slate-900">Liens externes</h1>
+            <p class="mt-1 text-sm text-slate-600">Liens affichés dans le lanceur d'apps du header pour tous les utilisateurs authentifiés (cf. specs §3.12).</p>
+        </div>
+        <a href="{{ path('admin_external_links_new') }}" class="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">
+            + Nouveau lien
+        </a>
+    </header>
+
+    <div class="mt-6 overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <table class="min-w-full divide-y divide-slate-200 text-sm">
+            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr>
+                    <th class="px-3 py-2">Pos.</th>
+                    <th class="px-3 py-2">Libellé</th>
+                    <th class="px-3 py-2">URL</th>
+                    <th class="px-3 py-2">Statut</th>
+                    <th class="px-3 py-2 text-right">Actions</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+                {% for link in links %}
+                    <tr>
+                        <td class="px-3 py-2 font-mono text-xs text-slate-500">{{ link.position }}</td>
+                        <td class="px-3 py-2">
+                            <div class="flex items-center gap-2">
+                                {% if link.icon %}
+                                    <span class="grid h-7 w-7 place-items-center rounded-md bg-slate-100 text-base" aria-hidden="true">{{ link.icon }}</span>
+                                {% endif %}
+                                <div>
+                                    <div class="font-medium text-slate-900">{{ link.label }}</div>
+                                    {% if link.description %}
+                                        <div class="text-xs text-slate-500">{{ link.description }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="max-w-xs truncate px-3 py-2 text-slate-600">
+                            <a href="{{ link.url }}" target="_blank" rel="noopener noreferrer" class="hover:underline">{{ link.url }}</a>
+                        </td>
+                        <td class="px-3 py-2">
+                            {% if link.enabled %}
+                                <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Actif</span>
+                            {% else %}
+                                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Désactivé</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-3 py-2 text-right">
+                            <div class="inline-flex items-center gap-1">
+                                <a href="{{ path('admin_external_links_edit', {id: link.id}) }}" class="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">
+                                    Modifier
+                                </a>
+
+                                <form method="post" action="{{ path('admin_external_links_toggle', {id: link.id}) }}" class="inline">
+                                    <input type="hidden" name="_token" value="{{ csrf_token('external_link_toggle_' ~ link.id) }}">
+                                    <button type="submit" class="rounded-md border border-slate-300 px-2 py-1 text-xs text-slate-700 hover:bg-slate-50">
+                                        {{ link.enabled ? 'Désactiver' : 'Activer' }}
+                                    </button>
+                                </form>
+
+                                <form
+                                    method="post"
+                                    action="{{ path('admin_external_links_delete', {id: link.id}) }}"
+                                    class="inline"
+                                    onsubmit="return confirm('Supprimer définitivement « {{ link.label|e('js') }} » ?');"
+                                >
+                                    <input type="hidden" name="_token" value="{{ csrf_token('external_link_delete_' ~ link.id) }}">
+                                    <button type="submit" class="rounded-md border border-red-200 px-2 py-1 text-xs text-red-700 hover:bg-red-50">
+                                        Supprimer
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="px-3 py-8 text-center text-sm text-slate-500">
+                            Aucun lien configuré pour l'instant.
+                            <a href="{{ path('admin_external_links_new') }}" class="text-indigo-700 hover:underline">Créer le premier ?</a>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}

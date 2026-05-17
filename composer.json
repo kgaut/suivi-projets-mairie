@@ -18,6 +18,7 @@
         "symfony/console": "^7.4.9",
         "symfony/dotenv": "^7.4.9",
         "symfony/flex": "^2.10",
+        "symfony/form": "7.4.*",
         "symfony/framework-bundle": "^7.4.10",
         "symfony/http-client": "7.4.*",
         "symfony/runtime": "^7.4.8",
@@ -27,6 +28,7 @@
         "symfony/uid": "7.4.*",
         "symfony/ux-live-component": ">=3",
         "symfony/ux-turbo": ">=3",
+        "symfony/validator": "7.4.*",
         "symfony/yaml": "^7.4.10",
         "symfonycasts/tailwind-bundle": ">=0.12"
     },

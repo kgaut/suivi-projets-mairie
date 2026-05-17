@@ -60,5 +60,14 @@ services:
             $rootDir: '%kernel.project_dir%/var/uploads'
             $publicPrefix: '/uploads/'
 
+    # Ports applicatifs → repositories Doctrine. Permet aux contrôleurs et
+    # services de typer sur l'interface (`App\Application\...`) au lieu du
+    # repository concret (`App\Infrastructure\...`) — cf. docs/qualite.md §3.
+    App\Application\User\UserRepositoryInterface:
+        alias: App\Infrastructure\Repository\UserRepository
+
+    App\Application\ExternalLink\ExternalLinkRepositoryInterface:
+        alias: App\Infrastructure\Repository\ExternalLinkRepository
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones
